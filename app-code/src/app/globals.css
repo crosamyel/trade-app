@@ -1,0 +1,124 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-primary: #ffc543;
+  --color-background: #f9f4e8;
+  --color-text: #2a2a2a;
+  --color-eco: #7a8f58;
+  --color-warm: #d97a3a;
+  --color-foreground: var(--color-text);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html {
+  color-scheme: light;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  /* Remplit la safe-area-top en brun (couleur du header) sur iOS */
+  background: #3c2f22;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-text);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  width: 100vw;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  font-size: clamp(14px, 4vw, 16px);
+  /* Évite le bounce scroll sur le body en PWA */
+  overscroll-behavior: none;
+}
+
+/* ===== TOUS LES BOUTONS — iOS touch fixes ===== */
+button,
+[role="button"] {
+  /* Élimine le délai 300ms iOS et active :active immédiatement */
+  touch-action: manipulation;
+  cursor: pointer;
+  /* PAS de min-height global : les boutons circulaires deviendraient ovales.
+     Les gros CTA ont leur hauteur explicite (52–64px). */
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+  z-index: 1;
+}
+
+a {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Supprime le flash global */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ===== IMAGES RESPONSIVES ===== */
+img {
+  max-width: 100%;
+}
+
+/* Petits écrans (iPhone SE ≤ 375px) */
+@media (max-width: 375px) {
+  :root {
+    --scale: 0.92;
+  }
+}
+
+/* ===== ANIMATIONS ===== */
+
+@keyframes page-dissolve {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.page-enter {
+  -webkit-animation: page-dissolve 0.25s ease both;
+  animation: page-dissolve 0.25s ease both;
+  /* L'animation ne doit jamais bloquer les interactions */
+  pointer-events: auto;
+}
+
+@keyframes page-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.page-fade {
+  -webkit-animation: page-fade-in 0.2s ease both;
+  animation: page-fade-in 0.2s ease both;
+  pointer-events: auto;
+}
+
+/* Sur mobile, désactive les animations complexes qui bloquent les touches */
+@media (max-width: 768px) {
+  .page-enter {
+    animation-duration: 0.1s !important;
+    -webkit-animation-duration: 0.1s !important;
+  }
+  .page-fade {
+    animation-duration: 0.1s !important;
+    -webkit-animation-duration: 0.1s !important;
+  }
+  /* Le bouton start page : réduit la transition à 0.3s sur mobile */
+  .btn-start,
+  .btn-circle,
+  .btn-arrow,
+  .btn-label {
+    transition-duration: 0.3s !important;
+  }
+}
+
+/* Respect du choix "pas d'animations" système */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
