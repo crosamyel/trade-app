@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { HeaderActions } from "@/components/HeaderActions";
 import { supabase } from "@/lib/supabase";
 
@@ -19,11 +20,15 @@ type Analysis = {
   material: string;
   style: string;
   description: string;
+  coins_value: number | null;
+  counterfeit_warning: boolean;
+  counterfeit_reason: string;
 };
 
 const EMPTY_ANALYSIS: Analysis = {
   category: "", size: "", color: "", condition: "",
   brand: "", material: "", style: "", description: "",
+  coins_value: null, counterfeit_warning: false, counterfeit_reason: "",
 };
 
 /* Les 4 slots photo : front + back + label obligatoires, detail optionnel */
@@ -31,23 +36,26 @@ export type SlotId = "front" | "back" | "label" | "detail";
 export type Photos = Record<SlotId, string | null>;
 
 export default function UploadPage() {
+  const router = useRouter();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [photos, setPhotos] = useState<Photos>({ front: null, back: null, label: null, detail: null });
   const [analysis, setAnalysis] = useState<Analysis>(EMPTY_ANALYSIS);
 
-  // Reçoit les données IA et passe à l'étape 3 en une seule mise à jour
+  // Reçoit les données IA et passe à l'étape 3
   function handleAnalysisDone(data: Partial<Analysis>) {
-    setAnalysis(prev => ({
-      ...prev,
-      category:    data.category    || prev.category,
-      size:        data.size        || prev.size,
-      color:       data.color       || prev.color,
-      condition:   data.condition   || prev.condition,
-      brand:       data.brand       || prev.brand,
-      material:    data.material    || prev.material,
-      style:       data.style       || prev.style,
-      description: data.description || prev.description,
-    }));
+    setAnalysis({
+      category:             data.category             ?? "",
+      size:                 data.size                 ?? "",
+      color:                data.color                ?? "",
+      condition:            data.condition            ?? "",
+      brand:                data.brand                ?? "",
+      material:             data.material             ?? "",
+      style:                data.style                ?? "",
+      description:          data.description          ?? "",
+      coins_value:          data.coins_value          ?? null,
+      counterfeit_warning:  data.counterfeit_warning  ?? false,
+      counterfeit_reason:   data.counterfeit_reason   ?? "",
+    });
     setStep(3);
   }
 
@@ -60,7 +68,7 @@ export default function UploadPage() {
       <ProgressBar step={step} />
 
       {step === 1 && (
-        <StepPhoto photos={photos} setPhotos={setPhotos} onAnalyse={() => setStep(2)} />
+        <StepPhoto photos={photos} setPhotos={setPhotos} onAnalyse={() => setStep(2)} onMulti={() => router.push("/upload/multi")} />
       )}
       {step === 2 && (
         <StepAnalyse photos={photos} onDone={handleAnalysisDone} />
@@ -77,10 +85,10 @@ function Header() {
   return (
     <div style={{
       position: "relative", background: "#3c2f22",
-      height: "calc(112px + env(safe-area-inset-top))",
+      height: "calc(68px + max(env(safe-area-inset-top), 44px))",
       borderBottomLeftRadius: 30, borderBottomRightRadius: 30,
       display: "flex", alignItems: "flex-end", justifyContent: "center",
-      paddingTop: "env(safe-area-inset-top)", paddingBottom: 14,
+      paddingTop: "max(env(safe-area-inset-top), 44px)", paddingBottom: 14,
     }}>
       <div style={{ position: "relative", width: 130, height: 40 }}>
         <Image src="/trade-logo-main.png" alt="TRADE" fill style={{ objectFit: "contain" }} />
@@ -113,10 +121,11 @@ const SLOT_META: { id: SlotId; label: string; required: boolean; ai?: boolean }[
   { id: "detail", label: "Detail", required: false },
 ];
 
-function StepPhoto({ photos, setPhotos, onAnalyse }: {
+function StepPhoto({ photos, setPhotos, onAnalyse, onMulti }: {
   photos: Photos;
   setPhotos: React.Dispatch<React.SetStateAction<Photos>>;
   onAnalyse: () => void;
+  onMulti: () => void;
 }) {
   function setSlot(id: SlotId, value: string | null) {
     setPhotos((p) => ({ ...p, [id]: value }));
@@ -166,6 +175,14 @@ function StepPhoto({ photos, setPhotos, onAnalyse }: {
           Front + label required to run the AI
         </p>
       )}
+
+      {/* Option multi-vêtements */}
+      <div style={{ marginTop: 20, textAlign: "center" }}>
+        <p style={{ fontSize: 12, color: "#9b8f7a", marginBottom: 8 }}>Tu as plusieurs vêtements à uploader ?</p>
+        <button onClick={onMulti} style={{ background: "none", border: "1.5px solid #b89b6e", borderRadius: 20, padding: "8px 20px", fontSize: 13, fontWeight: 700, color: "#3c2f22", cursor: "pointer" }}>
+          Plusieurs vêtements →
+        </button>
+      </div>
     </div>
   );
 }
@@ -275,13 +292,39 @@ function StepAnalyse({ photos, onDone }: {
     let cancelled = false;
     const started = Date.now();
 
+    // Compresse une dataUrl vers max 1024px, JPEG 0.82 — réduit 4MB → ~200KB
+    async function compress(dataUrl: string): Promise<string> {
+      return new Promise((resolve) => {
+        const img = new window.Image();
+        img.onload = () => {
+          const MAX = 1024;
+          let { width, height } = img;
+          if (width > MAX || height > MAX) {
+            if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+            else { width = Math.round(width * MAX / height); height = MAX; }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = width; canvas.height = height;
+          canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", 0.82));
+        };
+        img.onerror = () => resolve(dataUrl); // fallback si erreur
+        img.src = dataUrl;
+      });
+    }
+
     async function run() {
       let analysisData: Partial<Analysis> = {};
       try {
+        const [compFront, compLabel] = await Promise.all([
+          photos.front  ? compress(photos.front)  : Promise.resolve(null),
+          photos.label  ? compress(photos.label)  : Promise.resolve(null),
+        ]);
+
         const res = await fetch("/api/analyze-clothing", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ label: photos.label, front: photos.front }),
+          body: JSON.stringify({ front: compFront, label: compLabel }),
         });
         const data = await res.json();
         console.log("[AI] résultat brut:", data);
@@ -292,14 +335,17 @@ function StepAnalyse({ photos, onDone }: {
           }
         } else if (res.ok) {
           analysisData = {
-            category:    data.category    || "",
-            size:        data.size        || "",
-            color:       data.color       || "",
-            condition:   data.condition   || "",
-            brand:       data.brand       || "",
-            material:    data.material    || "",
-            style:       data.style       || "",
-            description: data.description || "",
+            category:            data.category            || "",
+            size:                data.size                || "",
+            color:               data.color               || "",
+            condition:           data.condition           || "",
+            brand:               data.brand               || "",
+            material:            data.material            || "",
+            style:               data.style               || "",
+            description:         data.description         || "",
+            coins_value:         typeof data.coins_value === 'number' ? data.coins_value : null,
+            counterfeit_warning: data.counterfeit_warning === true,
+            counterfeit_reason:  data.counterfeit_reason  || "",
           };
         } else {
           if (!cancelled) { console.error("AI error:", data); setFailed(true); }
@@ -307,14 +353,12 @@ function StepAnalyse({ photos, onDone }: {
       } catch (e) {
         if (!cancelled) { console.error(e); setFailed(true); }
       } finally {
-        // Affichage minimum ~1.8s pour que l'animation soit lisible
         const wait = Math.max(0, 1800 - (Date.now() - started));
         setTimeout(() => { if (!cancelled) onDoneRef.current(analysisData); }, wait);
       }
     }
     run();
     return () => { cancelled = true; };
-  // photos.label et photos.front ne changent pas pendant l'analyse
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photos.label, photos.front]);
 
@@ -386,7 +430,7 @@ function StepVerify({ photos, analysis, setAnalysis }: {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const coinsValue = calculateCoins(analysis.condition, analysis.brand);
+  const coinsValue = analysis.coins_value ?? calculateCoins(analysis.condition, analysis.brand);
 
   const canSubmit = !!photos.front && !!photos.back && !!photos.label;
 
@@ -476,16 +520,47 @@ function StepVerify({ photos, analysis, setAnalysis }: {
     }
   }
 
+  const aiWorked = !!(analysis.category || analysis.brand || analysis.description);
+
   return (
     <div style={{ padding: "12px 24px 130px" }}>
       <PhotoRow photos={photos} />
 
-      <div style={{ marginTop: 18 }}>
-        <Field label="Category" value={analysis.category} onChange={(v) => setAnalysis({ ...analysis, category: v })} />
-        <Field label="Brand" value={analysis.brand} onChange={(v) => setAnalysis({ ...analysis, brand: v })} />
-        <Field label="Size" value={analysis.size} onChange={(v) => setAnalysis({ ...analysis, size: v })} />
-        <Field label="Color" value={analysis.color} onChange={(v) => setAnalysis({ ...analysis, color: v })} />
-        <Field label="Condition" value={analysis.condition} onChange={(v) => setAnalysis({ ...analysis, condition: v })} />
+      {/* Statut IA */}
+      <div style={{ marginTop: 14, marginBottom: analysis.counterfeit_warning ? 10 : 18, background: aiWorked ? "#d6edd4" : "#f3d3cf", borderRadius: 16, padding: "10px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ fontSize: 18 }}>{aiWorked ? "✅" : "⚠️"}</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: aiWorked ? "#2d6a2a" : "#7a2e26" }}>
+          {aiWorked
+            ? "Champs pré-remplis par l'IA — vérifie et modifie si besoin."
+            : "L'IA n'a pas pu analyser la photo. Remplis les champs manuellement."}
+        </span>
+      </div>
+
+      {/* Alerte contrefaçon */}
+      {analysis.counterfeit_warning && (
+        <div style={{ marginBottom: 18, background: "#fef3c7", borderRadius: 16, padding: "12px 16px", display: "flex", alignItems: "flex-start", gap: 10, border: "1.5px solid #f59e0b" }}>
+          <span style={{ fontSize: 20, flexShrink: 0 }}>⚠️</span>
+          <div>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: "#92400e" }}>Attention — possible contrefaçon</p>
+            {analysis.counterfeit_reason && (
+              <p style={{ margin: "4px 0 0", fontSize: 12, color: "#92400e", lineHeight: 1.4 }}>{analysis.counterfeit_reason}</p>
+            )}
+            <p style={{ margin: "4px 0 0", fontSize: 11, color: "#a16207", lineHeight: 1.4 }}>Tu peux quand même publier, mais sois honnête dans ta description.</p>
+          </div>
+        </div>
+      )}
+
+      <div>
+        <Field label="Titre *" value={analysis.category} onChange={(v) => setAnalysis({ ...analysis, category: v })} placeholder="ex: Hoodie noir Nike" />
+        <div style={{ display: "flex", gap: 10 }}>
+          <div style={{ flex: 1 }}><Field label="Marque" value={analysis.brand} onChange={(v) => setAnalysis({ ...analysis, brand: v })} placeholder="ex: Nike" /></div>
+          <div style={{ flex: 1 }}><Field label="Taille" value={analysis.size} onChange={(v) => setAnalysis({ ...analysis, size: v })} placeholder="ex: M" /></div>
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <div style={{ flex: 1 }}><Field label="Couleur" value={analysis.color} onChange={(v) => setAnalysis({ ...analysis, color: v })} placeholder="ex: Noir" /></div>
+          <div style={{ flex: 1 }}><Field label="État" value={analysis.condition} onChange={(v) => setAnalysis({ ...analysis, condition: v })} placeholder="ex: Bon état" /></div>
+        </div>
+        <Field label="Style" value={analysis.style} onChange={(v) => setAnalysis({ ...analysis, style: v })} placeholder="ex: Streetwear" />
         <DescField value={analysis.description} onChange={(v) => setAnalysis({ ...analysis, description: v })} />
       </div>
 
@@ -528,46 +603,31 @@ function StepVerify({ photos, analysis, setAnalysis }: {
   );
 }
 
-function Field({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
-    <div style={{ marginBottom: 14 }}>
-      <label style={{ display: "block", fontSize: 14, color: "#7a6f5d", marginBottom: 5 }}>{label}</label>
-      <div style={{
-        position: "relative", display: "flex", alignItems: "center",
-        background: "#fff", borderRadius: 22, height: 44, padding: "0 14px",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
-      }}>
-        <input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          style={{ flex: 1, border: "none", outline: "none", background: "transparent", fontSize: 15, color: "#2A2A2A" }}
-        />
-        <span style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 13, fontWeight: 700, color: "#3a7bd5" }}>
-          AI <DoubleCheck color="#3a7bd5" small />
-        </span>
-      </div>
+    <div style={{ marginBottom: 12 }}>
+      <label style={{ display: "block", fontSize: 13, color: "#7a6f5d", fontWeight: 600, marginBottom: 4 }}>{label}</label>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{ width: "100%", height: 46, background: "#fff", border: value ? "1.5px solid #a8c9a8" : "1.5px solid #e0d8cc", borderRadius: 23, padding: "0 16px", fontSize: 15, color: "#2A2A2A", outline: "none", boxSizing: "border-box", boxShadow: "0 2px 6px rgba(0,0,0,0.04)", fontFamily: "inherit" }}
+      />
     </div>
   );
 }
 
 function DescField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
-    <div style={{ marginBottom: 14 }}>
-      <label style={{ display: "block", fontSize: 14, color: "#7a6f5d", marginBottom: 5 }}>Description</label>
-      <div style={{
-        position: "relative", background: "#fff", borderRadius: 18, padding: "10px 14px",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
-      }}>
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          rows={3}
-          style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 15, color: "#2A2A2A", resize: "none", fontFamily: "inherit", lineHeight: 1.5 }}
-        />
-        <span style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 13, fontWeight: 700, color: "#3a7bd5", justifyContent: "flex-end" }}>
-          AI <DoubleCheck color="#3a7bd5" small />
-        </span>
-      </div>
+    <div style={{ marginBottom: 12 }}>
+      <label style={{ display: "block", fontSize: 13, color: "#7a6f5d", fontWeight: 600, marginBottom: 4 }}>Description</label>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={5}
+        placeholder="Description générée par l'IA, modifiable…"
+        style={{ width: "100%", background: "#fff", border: value ? "1.5px solid #a8c9a8" : "1.5px solid #e0d8cc", borderRadius: 18, padding: "12px 16px", fontSize: 14, color: "#2A2A2A", outline: "none", resize: "none", fontFamily: "inherit", lineHeight: 1.6, boxSizing: "border-box", boxShadow: "0 2px 6px rgba(0,0,0,0.04)" }}
+      />
     </div>
   );
 }

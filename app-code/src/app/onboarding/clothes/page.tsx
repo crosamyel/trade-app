@@ -70,7 +70,7 @@ export default function OnboardingClothes() {
     >
 
       {/* Titre centré */}
-      <div className="absolute" style={{ top: "calc(104px + env(safe-area-inset-top, 0px))", left: 24, right: 24 }}>
+      <div className="absolute" style={{ top: "calc(160px + env(safe-area-inset-top, 0px))", left: 24, right: 24 }}>
         <h1
           style={{
             fontSize: 32,
@@ -87,15 +87,15 @@ export default function OnboardingClothes() {
       </div>
 
       {/* Soulignements sous "clothing" et "trading" */}
-      <div className="absolute pointer-events-none" style={{ left: 242, top: "calc(138px + env(safe-area-inset-top, 0px))", width: 122, height: 10 }}>
+      <div className="absolute pointer-events-none" style={{ left: 242, top: "calc(194px + env(safe-area-inset-top, 0px))", width: 122, height: 10 }}>
         <Image src="/onb-underline-clothing.png" alt="" fill className="object-contain" />
       </div>
-      <div className="absolute pointer-events-none" style={{ left: 208, top: "calc(175px + env(safe-area-inset-top, 0px))", width: 105, height: 10 }}>
+      <div className="absolute pointer-events-none" style={{ left: 208, top: "calc(231px + env(safe-area-inset-top, 0px))", width: 105, height: 10 }}>
         <Image src="/onb-underline-trading.png" alt="" fill className="object-contain" />
       </div>
 
       {/* "Select" centré */}
-      <div className="absolute" style={{ top: "calc(206px + env(safe-area-inset-top, 0px))", left: 0, right: 0 }}>
+      <div className="absolute" style={{ top: "calc(262px + env(safe-area-inset-top, 0px))", left: 0, right: 0 }}>
         <p style={{ fontSize: 22, fontStyle: "italic", color: "#3c2f22", opacity: 0.55, textAlign: "center" }}>
           Select
         </p>
@@ -112,7 +112,7 @@ export default function OnboardingClothes() {
       {/* Grille 2×3 — cartes plus étroites, images à l'intérieur */}
       <div
         className="absolute grid grid-cols-2"
-        style={{ top: "calc(242px + env(safe-area-inset-top, 0px))", left: 66, right: 66, gap: 12, zIndex: 5 }}
+        style={{ top: "calc(298px + env(safe-area-inset-top, 0px))", left: 66, right: 66, gap: 12, zIndex: 5 }}
       >
         {CATEGORIES.map((cat) => {
           const isSelected = selected.has(cat.label);

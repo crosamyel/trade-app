@@ -22,6 +22,12 @@ export default function ProfilePage() {
   const [articlesCount, setArticlesCount] = useState(0);
   const [trades, setTrades] = useState(0);
   const [stars, setStars] = useState("—");
+  // Friperie
+  const [accountType, setAccountType] = useState<"particulier" | "friperie">("particulier");
+  const [shopName, setShopName] = useState("");
+  const [verifiedBadge, setVerifiedBadge] = useState(false);
+  const [monthlyTarget, setMonthlyTarget] = useState<number | null>(null);
+  const [monthlyPosts, setMonthlyPosts] = useState(0);
 
   useEffect(() => {
     async function init() {
@@ -39,6 +45,10 @@ export default function ProfilePage() {
         if (typeof prof?.coins_balance === "number") setCoins(prof.coins_balance);
         if (prof?.city) setCity(prof.city);
         if (prof?.bio) setBio(prof.bio);
+        if (prof?.account_type) setAccountType(prof.account_type);
+        if (prof?.shop_name) setShopName(prof.shop_name);
+        if (typeof prof?.verified_badge === "boolean") setVerifiedBadge(prof.verified_badge);
+        if (typeof prof?.monthly_post_target === "number") setMonthlyTarget(prof.monthly_post_target);
       } catch { /* profiles unavailable */ }
 
       // My items (real articles)
@@ -46,6 +56,15 @@ export default function ProfilePage() {
         .from("clothing").select("*")
         .eq("user_id", user.id).order("created_at", { ascending: false });
       setItems((clothes as Item[]) ?? []);
+
+      // Posts ce mois-ci (pour friperies)
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const { count: monthCount } = await supabase
+        .from("clothing").select("*", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .gte("created_at", startOfMonth);
+      setMonthlyPosts(monthCount ?? 0);
 
       // Articles count (active items)
       const { count } = await supabase
@@ -79,10 +98,10 @@ export default function ProfilePage() {
       {/* Header unifié */}
       <div style={{
         position: "relative", background: "#3c2f22",
-        height: "calc(112px + env(safe-area-inset-top))",
+        height: "calc(68px + max(env(safe-area-inset-top), 44px))",
         borderBottomLeftRadius: 30, borderBottomRightRadius: 30,
         display: "flex", alignItems: "flex-end", justifyContent: "center",
-        paddingTop: "env(safe-area-inset-top)", paddingBottom: 14,
+        paddingTop: "max(env(safe-area-inset-top), 44px)", paddingBottom: 14,
       }}>
         <div style={{ position: "relative", width: 150, height: 44 }}>
           <Image src="/trade-logo-main.png" alt="TRADE" fill style={{ objectFit: "contain" }} />
@@ -105,8 +124,30 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Nom */}
-        <h1 style={{ textAlign: "center", margin: "0 0 10px", fontSize: 22, fontWeight: 800, fontStyle: "italic", color: "#2D1A0A" }}>{name}</h1>
+        {/* Nom + badge friperie */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 6 }}>
+          <h1 style={{ textAlign: "center", margin: 0, fontSize: 22, fontWeight: 800, fontStyle: "italic", color: "#2D1A0A" }}>
+            {accountType === "friperie" && shopName ? shopName : name}
+          </h1>
+          {accountType === "friperie" && verifiedBadge && (
+            <span style={{ background: "#3c2f22", color: "#FFC543", fontSize: 11, fontWeight: 800, padding: "3px 10px", borderRadius: 20 }}>✓ VÉRIFIÉ</span>
+          )}
+          {accountType === "friperie" && !verifiedBadge && (
+            <span style={{ background: "#f0e2b8", color: "#8a6d2a", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20 }}>🏪 Friperie</span>
+          )}
+        </div>
+
+        {/* Compteur de posts mensuel — friperies uniquement */}
+        {accountType === "friperie" && monthlyTarget !== null && (
+          <div style={{ margin: "0 20px 14px", background: monthlyPosts >= monthlyTarget ? "#e8f5e0" : "#fff3cd", borderRadius: 16, padding: "10px 16px", border: `1.5px solid ${monthlyPosts >= monthlyTarget ? "#a8d48a" : "#f0c040"}` }}>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: monthlyPosts >= monthlyTarget ? "#3d7a1a" : "#7a5a0a" }}>
+              {monthlyPosts >= monthlyTarget
+                ? `✓ ${monthlyPosts} articles publiés ce mois — objectif atteint ! (${monthlyTarget})`
+                : `⚠ ${monthlyPosts} articles publiés ce mois — objectif : ${monthlyTarget}`
+              }
+            </p>
+          </div>
+        )}
 
         {/* Info */}
         <div style={{ display: "flex", gap: 14, justifyContent: "center", marginBottom: 18, padding: "0 6px" }}>
@@ -154,7 +195,7 @@ export default function ProfilePage() {
         {tab === "articles" ? (
           items.length > 0 ? (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-              {items.map((it) => <ItemCard key={String(it.id)} item={it} />)}
+              {items.map((it) => <ItemCard key={String(it.id)} item={it} onEdit={() => router.push(`/edit-clothing/${it.id}`)} />)}
             </div>
           ) : (
             <div style={{ textAlign: "center", marginTop: 24 }}>
@@ -194,7 +235,7 @@ function Tab({ label, active, onClick }: { label: string; active: boolean; onCli
   );
 }
 
-function ItemCard({ item }: { item: Item }) {
+function ItemCard({ item, onEdit }: { item: Item; onEdit: () => void }) {
   const online = (item.status ?? "active") === "active";
   return (
     <div style={{ background: "#F9F4E8", borderRadius: 16, overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
@@ -214,7 +255,7 @@ function ItemCard({ item }: { item: Item }) {
             {item.price_coins ?? 20}
             <span style={{ position: "relative", display: "inline-block", width: 12, height: 12 }}><Image src="/coin.png" alt="" fill style={{ objectFit: "contain" }} /></span>
           </span>
-          <span style={{ fontSize: 12, color: "#2D1A0A", opacity: 0.6, textDecoration: "underline" }}>Edit →</span>
+          <button onClick={onEdit} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: 12, color: "#2D1A0A", opacity: 0.6, textDecoration: "underline" }}>Edit →</button>
         </div>
       </div>
     </div>

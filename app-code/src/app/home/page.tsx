@@ -39,10 +39,13 @@ export default function HomePage() {
 
   // Geste de swipe
   const [dragX, setDragX] = useState(0);
+  const [dragY, setDragY] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [exitDir, setExitDir] = useState<"left" | "right" | null>(null);
   const startX = useRef<number | null>(null);
+  const startY = useRef<number | null>(null);
   const dragXRef = useRef(0);
+  const dragYRef = useRef(0);
 
   // Match
   const [showMatchPopup, setShowMatchPopup] = useState(false);
@@ -199,16 +202,34 @@ export default function HomePage() {
   }
 
   // Gestes tactile + souris
-  function startDrag(x: number) { startX.current = x; setDragging(true); }
-  function moveDrag(x: number) {
-    if (startX.current == null) return;
-    const d = x - startX.current;
-    dragXRef.current = d; setDragX(d);
+  function startDrag(x: number, y: number) { startX.current = x; startY.current = y; setDragging(true); }
+  function moveDrag(x: number, y: number) {
+    if (startX.current == null || startY.current == null) return;
+    const dx = x - startX.current;
+    const dy = y - startY.current;
+    dragXRef.current = dx; setDragX(dx);
+    dragYRef.current = dy; setDragY(dy);
   }
   function endDrag() {
     if (startX.current == null) return;
-    startX.current = null; setDragging(false);
+    startX.current = null; startY.current = null; setDragging(false);
     const dx = dragXRef.current;
+    const dy = dragYRef.current;
+    dragYRef.current = 0; setDragY(0);
+    const isVertical = Math.abs(dy) > Math.abs(dx);
+    // Swipe haut dominant → page de détail
+    if (dy < -80 && isVertical && current) {
+      setDragX(0); dragXRef.current = 0;
+      router.push(`/detail/${current.id}`);
+      return;
+    }
+    // Swipe bas dominant → article précédent
+    if (dy > 80 && isVertical && currentIndex > 0) {
+      setDragX(0); dragXRef.current = 0;
+      setExitDir(null);
+      setCurrentIndex((i) => i - 1);
+      return;
+    }
     if (dx > 60) decide("right");
     else if (dx < -60) decide("left");
     else { setDragX(0); dragXRef.current = 0; }
@@ -241,9 +262,9 @@ export default function HomePage() {
           display: "flex",
           alignItems: "flex-end",
           justifyContent: "center",
-          paddingTop: "env(safe-area-inset-top)",
+          paddingTop: "max(env(safe-area-inset-top), 44px)",
           paddingBottom: 14,
-          height: "calc(112px + env(safe-area-inset-top))",
+          height: "calc(68px + max(env(safe-area-inset-top), 44px))",
           zIndex: 20,
         }}
       >
@@ -264,7 +285,7 @@ export default function HomePage() {
       {/* ===== SCRIBBLE ===== */}
       <div
         style={{
-          position: "absolute", top: "calc(100px + env(safe-area-inset-top))", left: -30,
+          position: "absolute", top: "calc(56px + max(env(safe-area-inset-top), 44px))", left: -30,
           width: 460, height: 310,
           zIndex: 2, pointerEvents: "none", opacity: 0.85,
         }}
@@ -276,7 +297,7 @@ export default function HomePage() {
       <div
         style={{
           position: "absolute",
-          top: "calc(140px + env(safe-area-inset-top))",
+          top: "calc(84px + max(env(safe-area-inset-top), 44px))",
           bottom: "calc(160px + env(safe-area-inset-bottom))",
           left: "50%",
           transform: "translateX(-50%)",
@@ -290,11 +311,11 @@ export default function HomePage() {
           </div>
         ) : current ? (
           <div
-            onTouchStart={(e) => { e.preventDefault(); startDrag(e.touches[0].clientX); }}
-            onTouchMove={(e) => { e.preventDefault(); moveDrag(e.touches[0].clientX); }}
+            onTouchStart={(e) => { e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }}
+            onTouchMove={(e) => { e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); }}
             onTouchEnd={endDrag}
-            onMouseDown={(e) => startDrag(e.clientX)}
-            onMouseMove={(e) => { if (dragging) moveDrag(e.clientX); }}
+            onMouseDown={(e) => startDrag(e.clientX, e.clientY)}
+            onMouseMove={(e) => { if (dragging) moveDrag(e.clientX, e.clientY); }}
             onMouseUp={endDrag}
             onMouseLeave={() => { if (dragging) endDrag(); }}
             style={{

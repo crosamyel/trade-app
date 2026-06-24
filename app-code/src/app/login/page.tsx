@@ -67,10 +67,10 @@ export default function LoginPage() {
       {/* Header avec safe area */}
       <div style={{
         background: "#3c2f22", width: "100%",
-        height: "calc(170px + env(safe-area-inset-top, 0px))",
+        height: "calc(126px + max(env(safe-area-inset-top, 0px), 44px))",
         borderBottomLeftRadius: 40, borderBottomRightRadius: 40,
         display: "flex", alignItems: "flex-end", justifyContent: "center",
-        paddingTop: "env(safe-area-inset-top, 0px)",
+        paddingTop: "max(env(safe-area-inset-top, 0px), 44px)",
         paddingBottom: 28, boxSizing: "border-box", flexShrink: 0,
       }}>
         <div style={{ position: "relative", width: 120, height: 76 }}>

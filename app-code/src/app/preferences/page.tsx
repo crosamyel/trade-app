@@ -70,10 +70,10 @@ export default function PreferencesPage() {
       {/* Header */}
       <div style={{
         position: "relative", background: "#3c2f22", flexShrink: 0,
-        height: "calc(112px + env(safe-area-inset-top))",
+        height: "calc(68px + max(env(safe-area-inset-top), 44px))",
         borderBottomLeftRadius: 30, borderBottomRightRadius: 30,
         display: "flex", alignItems: "flex-end", justifyContent: "center",
-        paddingTop: "env(safe-area-inset-top)", paddingBottom: 14,
+        paddingTop: "max(env(safe-area-inset-top), 44px)", paddingBottom: 14,
       }}>
         <button
           onClick={() => router.back()}

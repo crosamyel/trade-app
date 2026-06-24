@@ -40,10 +40,10 @@ export default function EditProfilePage() {
       {/* Header */}
       <div style={{
         position: "relative", background: "#3c2f22", flexShrink: 0,
-        height: "calc(112px + env(safe-area-inset-top, 0px))",
+        height: "calc(68px + max(env(safe-area-inset-top, 0px), 44px))",
         borderBottomLeftRadius: 30, borderBottomRightRadius: 30,
         display: "flex", alignItems: "flex-end", justifyContent: "center",
-        paddingTop: "env(safe-area-inset-top, 0px)", paddingLeft: 18, paddingRight: 18, paddingBottom: 16,
+        paddingTop: "max(env(safe-area-inset-top, 0px), 44px)", paddingLeft: 18, paddingRight: 18, paddingBottom: 16,
       }}>
         <button onClick={() => router.back()} style={{ position: "absolute", left: 14, bottom: 12, width: 38, height: 38, borderRadius: "50%", background: "#2D1A0A", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }} aria-label="Back">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 5L8 12L15 19" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>

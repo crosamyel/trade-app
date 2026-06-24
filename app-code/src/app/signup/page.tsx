@@ -14,6 +14,8 @@ export default function SignupPage() {
   const [confirm, setConfirm]   = useState("");
   const [age, setAge]           = useState(false);
   const [tos, setTos]           = useState(false);
+  const [accountType, setAccountType] = useState<"particulier" | "friperie">("particulier");
+  const [shopName, setShopName] = useState("");
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
   const router = useRouter();
@@ -28,14 +30,34 @@ export default function SignupPage() {
     if (!age || !tos) { setError("Please accept the conditions"); return; }
     setLoading(true);
     setError("");
+    if (accountType === "friperie" && !shopName.trim()) {
+      setError("Merci d'indiquer le nom de ta friperie.");
+      setLoading(false);
+      return;
+    }
     const { data, error: authErr } = await supabase.auth.signUp({
       email: email.trim(),
       password,
     });
     if (authErr) {
-      setError(authErr.message);
+      console.error("Supabase signup error:", authErr);
+      const rawMsg = authErr.message?.trim() ?? "";
+      // auth-js produit "{}" (JSON.stringify d'un Response) pour les erreurs HTTP 500
+      const msg =
+        authErr.status === 500 || rawMsg === "{}" || rawMsg === ""
+          ? "Server error — please try again in a moment."
+          : rawMsg;
+      setError(msg);
       setLoading(false);
     } else if (data.session) {
+      // Sauvegarder le type de compte dans profiles
+      if (data.session.user) {
+        await supabase.from("profiles").upsert({
+          id: data.session.user.id,
+          account_type: accountType,
+          ...(accountType === "friperie" ? { shop_name: shopName.trim() } : {}),
+        }, { onConflict: "id" });
+      }
       router.push("/home");
       router.refresh();
     } else {
@@ -61,10 +83,10 @@ export default function SignupPage() {
       {/* Header avec safe area */}
       <div style={{
         background: "#3c2f22", width: "100%",
-        height: "calc(170px + env(safe-area-inset-top, 0px))",
+        height: "calc(126px + max(env(safe-area-inset-top, 0px), 44px))",
         borderBottomLeftRadius: 40, borderBottomRightRadius: 40,
         display: "flex", alignItems: "flex-end", justifyContent: "center",
-        paddingTop: "env(safe-area-inset-top, 0px)",
+        paddingTop: "max(env(safe-area-inset-top, 0px), 44px)",
         paddingBottom: 28, boxSizing: "border-box", flexShrink: 0,
       }}>
         <div style={{ position: "relative", width: 120, height: 76 }}>
@@ -83,6 +105,23 @@ export default function SignupPage() {
           <p style={{ color: "#e03c3c", textAlign: "center", fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
             {error}
           </p>
+        )}
+
+        {/* Sélecteur type de compte */}
+        <p style={{ fontSize: 15, fontWeight: 800, color: "#3c2f22", marginBottom: 10 }}>Je suis :</p>
+        <div style={{ display: "flex", background: "#ede8dc", borderRadius: 26, padding: 4, marginBottom: 22, border: "2px solid #d4c9b5", boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
+          {(["particulier", "friperie"] as const).map((t) => (
+            <button key={t} type="button" onClick={() => setAccountType(t)} style={{ flex: 1, height: 48, borderRadius: 22, border: "none", cursor: "pointer", fontWeight: 800, fontSize: 15, background: accountType === t ? "#FFC543" : "transparent", color: accountType === t ? "#3c2f22" : "#9b8f7a", transition: "background 0.15s, color 0.15s", boxShadow: accountType === t ? "0 3px 10px rgba(255,197,67,0.4)" : "none" }}>
+              {t === "particulier" ? "👤 Particulier" : "🏪 Friperie"}
+            </button>
+          ))}
+        </div>
+
+        {accountType === "friperie" && (
+          <>
+            <label style={lbl}>Nom de la friperie</label>
+            <input value={shopName} onChange={e => setShopName(e.target.value)} placeholder="ex: La Belle Friperie" style={inp} />
+          </>
         )}
 
         <label style={lbl}>E-mail</label>

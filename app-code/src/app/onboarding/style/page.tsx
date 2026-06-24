@@ -55,7 +55,7 @@ export default function OnboardingStyle() {
       </div>
 
       {/* "Select" centré */}
-      <div className="absolute" style={{ top: "calc(184px + env(safe-area-inset-top, 0px))", left: 0, right: 0 }}>
+      <div className="absolute" style={{ top: "calc(200px + env(safe-area-inset-top, 0px))", left: 0, right: 0 }}>
         <p style={{ fontSize: 22, fontStyle: "italic", color: "#3c2f22", opacity: 0.55, textAlign: "center" }}>
           Select
         </p>
@@ -73,7 +73,7 @@ export default function OnboardingStyle() {
       <div
         className="absolute flex flex-col"
         style={{
-          top: "calc(218px + env(safe-area-inset-top, 0px))",
+          top: "calc(248px + env(safe-area-inset-top, 0px))",
           left: 30,
           right: 30,
           gap: 20,

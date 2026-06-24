@@ -13,6 +13,7 @@ type Match = {
   clothing_a_id: number | string; clothing_b_id: number | string;
   status?: string; confirmed_a?: boolean; confirmed_b?: boolean;
 };
+type ClothingItem = { id: string | number; title?: string; image_url?: string; size?: string; condition?: string };
 
 export default function ChatPage() {
   const router = useRouter();
@@ -28,6 +29,14 @@ export default function ChatPage() {
   const [showRating, setShowRating] = useState(false);
   const [rated, setRated] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Proposition d'échange
+  const [showProposal, setShowProposal] = useState(false);
+  const [proposalTab, setProposalTab] = useState<"mine" | "theirs">("theirs");
+  const [myItems, setMyItems] = useState<ClothingItem[]>([]);
+  const [theirItems, setTheirItems] = useState<ClothingItem[]>([]);
+  const [selectedMine, setSelectedMine] = useState<ClothingItem | null>(null);
+  const [selectedTheirs, setSelectedTheirs] = useState<ClothingItem | null>(null);
 
   useEffect(() => {
     async function init() {
@@ -92,6 +101,28 @@ export default function ChatPage() {
     setInput("");
     const { error } = await supabase.from("messages").insert({ match_id: matchId, sender_id: me, body: text });
     if (error) console.error("send error:", error);
+  }
+
+  async function openProposal() {
+    setSelectedMine(null); setSelectedTheirs(null); setProposalTab("theirs");
+    if (me && myItems.length === 0) {
+      const { data } = await supabase.from("clothing").select("id,title,image_url,size,condition")
+        .eq("user_id", me).eq("status", "active");
+      setMyItems((data as ClothingItem[]) ?? []);
+    }
+    if (otherId && theirItems.length === 0) {
+      const { data } = await supabase.from("clothing").select("id,title,image_url,size,condition")
+        .eq("user_id", otherId).eq("status", "active");
+      setTheirItems((data as ClothingItem[]) ?? []);
+    }
+    setShowProposal(true);
+  }
+
+  async function sendTradeProposal() {
+    if (!selectedMine || !selectedTheirs || !me) return;
+    const body = `🔄 Proposition d'échange :\n👕 Mon article : ${selectedMine.title ?? "Article"} (${selectedMine.size ?? "?"})\n👕 Ton article : ${selectedTheirs.title ?? "Article"} (${selectedTheirs.size ?? "?"})`;
+    await supabase.from("messages").insert({ match_id: matchId, sender_id: me, body });
+    setShowProposal(false);
   }
 
   const mySide: "a" | "b" | null = !match || !me ? null : match.user_a_uid === me ? "a" : "b";
@@ -161,7 +192,9 @@ export default function ChatPage() {
       <div style={{
         background: "#3c2f22", flexShrink: 0,
         borderBottomLeftRadius: 30, borderBottomRightRadius: 30,
-        height: 112, display: "flex", alignItems: "flex-end", padding: "0 18px 16px",
+        height: "calc(68px + max(env(safe-area-inset-top), 44px))",
+        display: "flex", alignItems: "flex-end",
+        paddingTop: "max(env(safe-area-inset-top), 44px)", paddingLeft: 18, paddingRight: 18, paddingBottom: 16,
       }}>
         <button onClick={() => router.push("/matches")} style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, marginRight: 8 }} aria-label="Back">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15 5L8 12L15 19" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -212,8 +245,18 @@ export default function ChatPage() {
         </div>
       )}
 
+      {/* Bouton "Proposer un échange" */}
+      <div style={{ flexShrink: 0, padding: "6px 14px 0" }}>
+        <button
+          onClick={openProposal}
+          style={{ width: "100%", height: 42, borderRadius: 21, border: "1.5px solid #3c2f22", background: "transparent", color: "#3c2f22", fontWeight: 700, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}
+        >
+          🔄 Proposer un échange
+        </button>
+      </div>
+
       {/* Barre d'envoi */}
-      <div style={{ flexShrink: 0, padding: "10px 14px 18px", display: "flex", gap: 10, alignItems: "center", background: "#F9F4E8" }}>
+      <div style={{ flexShrink: 0, padding: "8px 14px 18px", display: "flex", gap: 10, alignItems: "center", background: "#F9F4E8" }}>
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -225,6 +268,75 @@ export default function ChatPage() {
           Send
         </button>
       </div>
+
+      {/* Sheet — proposition d'échange */}
+      {showProposal && (
+        <div onClick={() => setShowProposal(false)} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(20,12,4,0.55)" }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "#F9F4E8", borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: "80dvh", display: "flex", flexDirection: "column" }}>
+            {/* En-tête sheet */}
+            <div style={{ padding: "16px 20px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <p style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "#3c2f22" }}>Proposer un échange</p>
+              <button onClick={() => setShowProposal(false)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 22, color: "#3c2f22", lineHeight: 1 }}>×</button>
+            </div>
+            {/* Tabs */}
+            <div style={{ display: "flex", margin: "12px 20px 0", background: "#ede8dc", borderRadius: 20, padding: 3 }}>
+              {(["theirs", "mine"] as const).map((tab) => (
+                <button key={tab} onClick={() => setProposalTab(tab)} style={{ flex: 1, height: 36, borderRadius: 17, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 14, background: proposalTab === tab ? "#3c2f22" : "transparent", color: proposalTab === tab ? "#FFC543" : "#3c2f22", transition: "background 0.15s" }}>
+                  {tab === "theirs" ? `Ses articles` : "Mes articles"}
+                </button>
+              ))}
+            </div>
+            {/* Grille articles */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px" }}>
+              {(proposalTab === "mine" ? myItems : theirItems).length === 0
+                ? <p style={{ textAlign: "center", color: "#9b8f7a", fontSize: 14, marginTop: 20 }}>Aucun article disponible</p>
+                : (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                    {(proposalTab === "mine" ? myItems : theirItems).map((item) => {
+                      const sel = proposalTab === "mine" ? selectedMine : selectedTheirs;
+                      const isSelected = sel?.id === item.id;
+                      return (
+                        <div key={String(item.id)} onClick={() => proposalTab === "mine" ? setSelectedMine(item) : setSelectedTheirs(item)}
+                          style={{ borderRadius: 14, overflow: "hidden", border: isSelected ? "3px solid #FFC543" : "3px solid transparent", cursor: "pointer", position: "relative", aspectRatio: "1/1", background: "#ddd" }}>
+                          {item.image_url && <img src={item.image_url} alt={item.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                          {isSelected && <div style={{ position: "absolute", inset: 0, background: "rgba(255,197,67,0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontSize: 22 }}>✓</span></div>}
+                          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.45)", padding: "3px 6px" }}>
+                            <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.title ?? "Article"}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
+              }
+            </div>
+            {/* Résumé de la sélection */}
+            {(selectedMine || selectedTheirs) && (
+              <div style={{ padding: "10px 16px 0", display: "flex", gap: 8 }}>
+                {[{ label: "Mon article", item: selectedMine }, { label: "Son article", item: selectedTheirs }].map(({ label, item }) => (
+                  <div key={label} style={{ flex: 1, background: "#ede8dc", borderRadius: 14, padding: "8px 10px", display: "flex", alignItems: "center", gap: 8 }}>
+                    {item?.image_url && <img src={item.image_url} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />}
+                    <div>
+                      <p style={{ margin: 0, fontSize: 10, color: "#9b8f7a", fontWeight: 600 }}>{label}</p>
+                      <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: "#3c2f22" }}>{item ? (item.title ?? "Article") : "—"}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Bouton envoyer */}
+            <div style={{ padding: "12px 16px 28px" }}>
+              <button
+                onClick={sendTradeProposal}
+                disabled={!selectedMine || !selectedTheirs}
+                style={{ width: "100%", height: 54, borderRadius: 27, border: "none", background: selectedMine && selectedTheirs ? "#FFC543" : "#e6ddca", color: selectedMine && selectedTheirs ? "#2D1A0A" : "#b3a896", fontWeight: 800, fontSize: 16, cursor: selectedMine && selectedTheirs ? "pointer" : "not-allowed", boxShadow: selectedMine && selectedTheirs ? "0 6px 18px rgba(255,197,67,0.4)" : "none" }}
+              >
+                Envoyer la proposition
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Popup de rating */}
       {showRating && !rated && (
