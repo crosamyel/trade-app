@@ -1,0 +1,15 @@
+# Fichiers design lourds (>50MB)
+*.ai
+app/images/edit image
+app/images/edit\ image
+
+# Node
+node_modules/
+.next/
+
+# Env
+.env.local
+.env*.local
+
+# OS
+.DS_Store
