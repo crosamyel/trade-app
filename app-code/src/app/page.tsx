@@ -17,14 +17,26 @@ export default function StartPage() {
 
   useEffect(() => {
     async function check() {
-      // getSession() lit depuis localStorage → instantané, pas de réseau
+      // Détecte si l'app est ouverte depuis l'écran d'accueil (PWA) ou dans un navigateur
+      const isPWA =
+        window.matchMedia("(display-mode: standalone)").matches ||
+        (navigator as unknown as { standalone?: boolean }).standalone === true;
+
+      if (!isPWA) {
+        // Navigateur web → page d'installation
+        router.replace("/install");
+        return;
+      }
+
+      // Mode PWA : vérifier l'authentification
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) { router.replace("/home"); return; }
       if (localStorage.getItem("trade_onboarded")) {
         router.replace("/login");
         return;
       }
-      setReady(true);
+      // Nouvel utilisateur → onboarding direct (sans la page landing)
+      router.replace("/onboarding");
     }
     check();
   }, [router]);

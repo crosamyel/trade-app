@@ -58,8 +58,8 @@ export default function OnboardingExplanation() {
       <div className="absolute" style={{ top: "calc(330px + env(safe-area-inset-top, 0px))", left: 40, right: 48 }}>
         <p
           style={{
-            fontSize: 19,
-            fontWeight: 600,
+            fontSize: 26,
+            fontWeight: 700,
             color: "#3c2f22",
             lineHeight: 1.5,
           }}
