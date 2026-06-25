@@ -40,6 +40,36 @@ export default function ShopPage() {
   const [tradesCount, setTradesCount] = useState(0);
   const [monthlyCount, setMonthlyCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [contacting, setContacting] = useState(false);
+
+  async function handleContact() {
+    setContacting(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { router.push("/login"); return; }
+
+    // Look for any existing conversation between the two users
+    const { data: existing } = await supabase
+      .from("matches")
+      .select("id")
+      .or(`and(user_a_uid.eq.${user.id},user_b_uid.eq.${userId}),and(user_a_uid.eq.${userId},user_b_uid.eq.${user.id})`)
+      .limit(1)
+      .maybeSingle();
+
+    if (existing?.id) {
+      router.push(`/chat/${existing.id}`);
+      return;
+    }
+
+    // Create a new direct chat (no clothing items attached)
+    const { data: created, error } = await supabase
+      .from("matches")
+      .insert({ user_a_uid: user.id, user_b_uid: userId })
+      .select("id")
+      .single();
+
+    if (error) { console.error("create chat:", error); setContacting(false); return; }
+    router.push(`/chat/${created.id}`);
+  }
 
   useEffect(() => {
     async function load() {
@@ -246,13 +276,16 @@ export default function ShopPage() {
       {/* Contact CTA */}
       <div style={{ position: "fixed", bottom: "calc(16px + env(safe-area-inset-bottom, 0px))", left: "50%", transform: "translateX(-50%)", width: "calc(100% - 48px)", maxWidth: 432, zIndex: 30 }}>
         <button
-          onClick={() => router.push("/matches")}
-          style={{ width: "100%", height: 58, borderRadius: 999, background: "#FFC543", border: "none", cursor: "pointer", fontSize: 18, fontWeight: 800, color: "#3c2f22", boxShadow: "0 8px 24px rgba(255,197,67,0.45)", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}
+          onClick={handleContact}
+          disabled={contacting}
+          style={{ width: "100%", height: 58, borderRadius: 999, background: "#FFC543", border: "none", cursor: contacting ? "not-allowed" : "pointer", fontSize: 18, fontWeight: 800, color: "#3c2f22", boxShadow: "0 8px 24px rgba(255,197,67,0.45)", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, opacity: contacting ? 0.7 : 1 }}
         >
-          Contact
-          <svg width="22" height="18" viewBox="0 0 28 22" fill="none">
-            <path d="M1 11H27M27 11L16 1M27 11L16 21" stroke="#3c2f22" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          {contacting ? "Opening chat…" : "Contact"}
+          {!contacting && (
+            <svg width="22" height="18" viewBox="0 0 28 22" fill="none">
+              <path d="M1 11H27M27 11L16 1M27 11L16 21" stroke="#3c2f22" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
         </button>
       </div>
     </div>

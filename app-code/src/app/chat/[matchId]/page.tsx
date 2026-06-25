@@ -222,8 +222,8 @@ export default function ChatPage() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Barre de confirmation d'échange */}
-      {match && !completed && (
+      {/* Barre de confirmation d'échange — uniquement si un trade avec items est en cours */}
+      {match && !completed && match.clothing_a_id && match.clothing_b_id && (
         <div style={{ flexShrink: 0, padding: "10px 14px 0" }}>
           {iConfirmed ? (
             <div style={{ textAlign: "center", fontSize: 13, color: "#2D1A0A", opacity: 0.65, padding: "8px 0" }}>
