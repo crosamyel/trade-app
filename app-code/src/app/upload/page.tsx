@@ -180,9 +180,9 @@ function StepPhoto({ photos, setPhotos, onAnalyse, onMulti }: {
 
       {/* Option multi-vêtements */}
       <div style={{ marginTop: 20, textAlign: "center" }}>
-        <p style={{ fontSize: 12, color: "#9b8f7a", marginBottom: 8 }}>Tu as plusieurs vêtements à uploader ?</p>
+        <p style={{ fontSize: 12, color: "#9b8f7a", marginBottom: 8 }}>Got multiple items to upload?</p>
         <button onClick={onMulti} style={{ background: "none", border: "1.5px solid #b89b6e", borderRadius: 20, padding: "8px 20px", fontSize: 13, fontWeight: 700, color: "#3c2f22", cursor: "pointer" }}>
-          Plusieurs vêtements →
+          Multiple items →
         </button>
       </div>
     </div>
@@ -220,7 +220,7 @@ function PhotoSlot({ meta, value, onPick, onClear }: {
               display: "flex", alignItems: "center", justifyContent: "center", padding: 0,
               boxShadow: "0 2px 6px rgba(0,0,0,0.25)",
             }}
-            aria-label={`Supprimer ${meta.label}`}
+            aria-label={`Remove ${meta.label}`}
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 2L10 10M10 2L2 10" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" /></svg>
           </button>
@@ -578,12 +578,12 @@ function StepVerify({ photos, analysis, setAnalysis }: {
       <div>
         <Field label="Title *" value={analysis.title || analysis.category} onChange={(v) => setAnalysis({ ...analysis, title: v })} placeholder="ex: Nike Black Hoodie" />
         <div style={{ display: "flex", gap: 10 }}>
-          <div style={{ flex: 1 }}><Field label="Marque" value={analysis.brand} onChange={(v) => setAnalysis({ ...analysis, brand: v })} placeholder="ex: Nike" /></div>
-          <div style={{ flex: 1 }}><Field label="Taille" value={analysis.size} onChange={(v) => setAnalysis({ ...analysis, size: v })} placeholder="ex: M" /></div>
+          <div style={{ flex: 1 }}><Field label="Brand" value={analysis.brand} onChange={(v) => setAnalysis({ ...analysis, brand: v })} placeholder="ex: Nike" /></div>
+          <div style={{ flex: 1 }}><Field label="Size" value={analysis.size} onChange={(v) => setAnalysis({ ...analysis, size: v })} placeholder="ex: M" /></div>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <div style={{ flex: 1 }}><Field label="Couleur" value={analysis.color} onChange={(v) => setAnalysis({ ...analysis, color: v })} placeholder="ex: Noir" /></div>
-          <div style={{ flex: 1 }}><Field label="État" value={analysis.condition} onChange={(v) => setAnalysis({ ...analysis, condition: v })} placeholder="ex: Bon état" /></div>
+          <div style={{ flex: 1 }}><Field label="Color" value={analysis.color} onChange={(v) => setAnalysis({ ...analysis, color: v })} placeholder="ex: Black" /></div>
+          <div style={{ flex: 1 }}><Field label="Condition" value={analysis.condition} onChange={(v) => setAnalysis({ ...analysis, condition: v })} placeholder="ex: Good" /></div>
         </div>
         <Field label="Style" value={analysis.style} onChange={(v) => setAnalysis({ ...analysis, style: v })} placeholder="ex: Streetwear" />
         <DescField value={analysis.description} onChange={(v) => setAnalysis({ ...analysis, description: v })} />
@@ -650,7 +650,7 @@ function DescField({ value, onChange }: { value: string; onChange: (v: string) =
         value={value}
         onChange={(e) => onChange(e.target.value)}
         rows={5}
-        placeholder="Description générée par l'IA, modifiable…"
+        placeholder="AI-generated description, editable…"
         style={{ width: "100%", background: "#fff", border: value ? "1.5px solid #a8c9a8" : "1.5px solid #e0d8cc", borderRadius: 18, padding: "12px 16px", fontSize: 14, color: "#2A2A2A", outline: "none", resize: "none", fontFamily: "inherit", lineHeight: 1.6, boxSizing: "border-box", boxShadow: "0 2px 6px rgba(0,0,0,0.04)" }}
       />
     </div>

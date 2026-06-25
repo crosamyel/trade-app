@@ -32,7 +32,7 @@ export default function OnboardingStyle() {
     >
 
       {/* Titre centré */}
-      <div className="absolute" style={{ top: "calc(104px + env(safe-area-inset-top, 0px))", left: 24, right: 24 }}>
+      <div className="absolute" style={{ top: 100, left: 24, right: 24 }}>
         <h1
           style={{
             fontSize: 32,
@@ -49,13 +49,13 @@ export default function OnboardingStyle() {
       {/* Soulignement sous "style" */}
       <div
         className="absolute pointer-events-none"
-        style={{ left: 136, top: "calc(138px + env(safe-area-inset-top, 0px))", width: 96, height: 12 }}
+        style={{ left: 136, top: 134, width: 96, height: 12 }}
       >
         <Image src="/onb-underline-style.png" alt="" fill className="object-contain" />
       </div>
 
       {/* "Select" centré */}
-      <div className="absolute" style={{ top: "calc(200px + env(safe-area-inset-top, 0px))", left: 0, right: 0 }}>
+      <div className="absolute" style={{ top: 162, left: 0, right: 0 }}>
         <p style={{ fontSize: 22, fontStyle: "italic", color: "#3c2f22", opacity: 0.55, textAlign: "center" }}>
           Select
         </p>
@@ -73,7 +73,7 @@ export default function OnboardingStyle() {
       <div
         className="absolute flex flex-col"
         style={{
-          top: "calc(248px + env(safe-area-inset-top, 0px))",
+          top: 196,
           left: 30,
           right: 30,
           gap: 20,

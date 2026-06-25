@@ -58,7 +58,7 @@ export default function MultiUploadPage() {
         body: JSON.stringify({ front: comp }),
       });
       const data = await res.json();
-      if (!res.ok || data.error) return { error: data.reason ?? "Analyse échouée" };
+      if (!res.ok || data.error) return { error: data.reason ?? "Analysis failed" };
       return {
         category: data.category ?? "",
         brand: data.brand ?? "",
@@ -70,7 +70,7 @@ export default function MultiUploadPage() {
         error: "",
       };
     } catch {
-      return { error: "Erreur réseau" };
+      return { error: "Network error" };
     }
   }
 
@@ -107,7 +107,7 @@ export default function MultiUploadPage() {
     setPhase("publishing");
     setPublishError("");
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setPublishError("Non connecté."); setPhase("review"); return; }
+    if (!user) { setPublishError("Not logged in."); setPhase("review"); return; }
 
     for (const item of items) {
       if (!item.photoDataUrl || item.analyzing) continue;
@@ -119,7 +119,7 @@ export default function MultiUploadPage() {
       const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
       const blob = new Blob([bytes], { type: mimeType });
       const { error: upErr } = await supabase.storage.from("clothing-images").upload(path, blob, { contentType: mimeType, upsert: true });
-      if (upErr) { setPublishError("Upload échoué pour " + (item.category ?? "un article")); setPhase("review"); return; }
+      if (upErr) { setPublishError("Upload failed for " + (item.category ?? "an item")); setPhase("review"); return; }
       const { data: pub } = supabase.storage.from("clothing-images").getPublicUrl(path);
 
       await supabase.from("clothing").insert({
@@ -142,17 +142,17 @@ export default function MultiUploadPage() {
   if (phase === "pick") {
     return (
       <div style={{ width: "100%", minHeight: "100dvh", background: "#f9f4e8", fontFamily: FONT }}>
-        <HeaderBar onBack={() => router.back()} title="Plusieurs vêtements" />
+        <HeaderBar onBack={() => router.back()} title="Multiple items" />
         <div style={{ padding: "24px 24px 140px", display: "flex", flexDirection: "column", alignItems: "center" }}>
           <p style={{ fontSize: 15, color: "#7a6f5d", textAlign: "center", lineHeight: 1.6, marginBottom: 32 }}>
-            Sélectionne jusqu&apos;à 12 photos.<br />L&apos;IA analysera chaque vêtement séparément.
+            Select up to 12 photos.<br />AI will analyze each item separately.
           </p>
           <button
             onClick={() => fileRef.current?.click()}
             style={{ width: 180, height: 180, borderRadius: 30, border: "2.5px dashed #b89b6e", background: "#3c2f22", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}
           >
             <svg width="48" height="48" viewBox="0 0 56 56" fill="none"><rect x="6" y="16" width="44" height="30" rx="6" stroke="rgba(255,255,255,0.5)" strokeWidth="3" /><circle cx="28" cy="31" r="8" stroke="rgba(255,255,255,0.5)" strokeWidth="3" /><path d="M22 20L26 14H30L34 20" stroke="rgba(255,255,255,0.5)" strokeWidth="3" strokeLinecap="round" /></svg>
-            <span style={{ color: "#FFC543", fontWeight: 700, fontSize: 15 }}>Choisir des photos</span>
+            <span style={{ color: "#FFC543", fontWeight: 700, fontSize: 15 }}>Choose photos</span>
           </button>
           <input ref={fileRef} type="file" accept="image/*" multiple onChange={(e) => e.target.files && handleFiles(e.target.files)} style={{ display: "none" }} />
         </div>
@@ -190,11 +190,11 @@ export default function MultiUploadPage() {
         <div style={{ position: "relative", width: "100%", aspectRatio: "3/4", borderRadius: 24, overflow: "hidden", background: "#3c2f22", marginBottom: 18 }}>
           {current.photoDataUrl
             ? <img src={current.photoDataUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-            : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ color: "rgba(255,255,255,0.4)", fontSize: 14 }}>Chargement…</span></div>
+            : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ color: "rgba(255,255,255,0.4)", fontSize: 14 }}>Loading…</span></div>
           }
           {current.analyzing && (
             <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <span style={{ color: "#FFC543", fontWeight: 700, fontSize: 15 }}>IA en cours…</span>
+              <span style={{ color: "#FFC543", fontWeight: 700, fontSize: 15 }}>Analyzing…</span>
             </div>
           )}
         </div>
@@ -202,11 +202,11 @@ export default function MultiUploadPage() {
         {!current.analyzing && (
           <>
             {/* Champs éditables */}
-            <SimpleField label="Catégorie" value={current.category} onChange={(v) => updateItem(reviewIndex, { category: v })} />
-            <SimpleField label="Marque" value={current.brand} onChange={(v) => updateItem(reviewIndex, { brand: v })} />
+            <SimpleField label="Category" value={current.category} onChange={(v) => updateItem(reviewIndex, { category: v })} />
+            <SimpleField label="Brand" value={current.brand} onChange={(v) => updateItem(reviewIndex, { brand: v })} />
             <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
-              <div style={{ flex: 1 }}><SimpleField label="Taille" value={current.size} onChange={(v) => updateItem(reviewIndex, { size: v })} /></div>
-              <div style={{ flex: 1 }}><SimpleField label="État" value={current.condition} onChange={(v) => updateItem(reviewIndex, { condition: v })} /></div>
+              <div style={{ flex: 1 }}><SimpleField label="Size" value={current.size} onChange={(v) => updateItem(reviewIndex, { size: v })} /></div>
+              <div style={{ flex: 1 }}><SimpleField label="Condition" value={current.condition} onChange={(v) => updateItem(reviewIndex, { condition: v })} /></div>
             </div>
             {/* Description read-only */}
             {current.description && (
@@ -220,7 +220,7 @@ export default function MultiUploadPage() {
                 </div>
               </div>
             )}
-            {current.error && <p style={{ color: "#e03c3c", fontSize: 13, marginBottom: 14 }}>⚠ {current.error} — tu peux quand même remplir manuellement.</p>}
+            {current.error && <p style={{ color: "#e03c3c", fontSize: 13, marginBottom: 14 }}>⚠ {current.error} — you can still fill it in manually.</p>}
           </>
         )}
       </div>
@@ -231,10 +231,10 @@ export default function MultiUploadPage() {
           disabled={reviewIndex === 0}
           onClick={() => setReviewIndex((i) => i - 1)}
           style={{ flex: 1, height: 50, borderRadius: 25, border: "none", background: reviewIndex === 0 ? "#e6ddca" : "#ede8dc", color: reviewIndex === 0 ? "#b3a896" : "#3c2f22", fontWeight: 700, fontSize: 15, cursor: reviewIndex === 0 ? "not-allowed" : "pointer" }}
-        >← Précédent</button>
+        >← Previous</button>
         {reviewIndex < total - 1
-          ? <button onClick={() => setReviewIndex((i) => i + 1)} style={{ flex: 2, height: 50, borderRadius: 25, border: "none", background: "#3c2f22", color: "#FFC543", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>Suivant →</button>
-          : <button onClick={publishAll} disabled={items.some(it => it.analyzing)} style={{ flex: 2, height: 50, borderRadius: 25, border: "none", background: items.some(it => it.analyzing) ? "#e6ddca" : "#FFC543", color: items.some(it => it.analyzing) ? "#b3a896" : "#2D1A0A", fontWeight: 800, fontSize: 16, cursor: "pointer", boxShadow: "0 6px 18px rgba(255,197,67,0.4)" }}>Publier tout ({total})</button>
+          ? <button onClick={() => setReviewIndex((i) => i + 1)} style={{ flex: 2, height: 50, borderRadius: 25, border: "none", background: "#3c2f22", color: "#FFC543", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>Next →</button>
+          : <button onClick={publishAll} disabled={items.some(it => it.analyzing)} style={{ flex: 2, height: 50, borderRadius: 25, border: "none", background: items.some(it => it.analyzing) ? "#e6ddca" : "#FFC543", color: items.some(it => it.analyzing) ? "#b3a896" : "#2D1A0A", fontWeight: 800, fontSize: 16, cursor: "pointer", boxShadow: "0 6px 18px rgba(255,197,67,0.4)" }}>Publish all ({total})</button>
         }
       </div>
     </div>

@@ -44,7 +44,7 @@ export default function OnboardingExplanation() {
       {/* Bulle de dialogue */}
       <div
         className="absolute pointer-events-none"
-        style={{ left: 12, top: "calc(360px + env(safe-area-inset-top, 0px))", width: 378, height: 288 }}
+        style={{ left: 12, top: "calc(280px + env(safe-area-inset-top, 0px))", width: 378, height: 288 }}
       >
         <Image
           src="/onb-speech-bubble.png"
@@ -55,11 +55,11 @@ export default function OnboardingExplanation() {
       </div>
 
       {/* Texte dans la bulle */}
-      <div className="absolute" style={{ top: "calc(383px + env(safe-area-inset-top, 0px))", left: 40, right: 48 }}>
+      <div className="absolute" style={{ top: "calc(302px + env(safe-area-inset-top, 0px))", left: 40, right: 48 }}>
         <p
           style={{
-            fontSize: 26,
-            fontWeight: 700,
+            fontSize: 19,
+            fontWeight: 600,
             color: "#3c2f22",
             lineHeight: 1.5,
           }}
@@ -73,7 +73,7 @@ export default function OnboardingExplanation() {
         className="absolute pointer-events-none"
         style={{
           left: 137,
-          top: "calc(530px + env(safe-area-inset-top, 0px))",
+          top: "calc(572px + env(safe-area-inset-top, 0px))",
           width: 80,
           height: 76,
           transform: "rotate(15deg)",
@@ -87,7 +87,7 @@ export default function OnboardingExplanation() {
         className="absolute pointer-events-none"
         style={{
           left: 27,
-          top: "calc(613px + env(safe-area-inset-top, 0px))",
+          top: "calc(650px + env(safe-area-inset-top, 0px))",
           width: 80,
           height: 76,
           transform: "rotate(-5.53deg)",

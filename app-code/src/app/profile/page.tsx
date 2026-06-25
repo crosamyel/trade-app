@@ -130,10 +130,10 @@ export default function ProfilePage() {
             {accountType === "friperie" && shopName ? shopName : name}
           </h1>
           {accountType === "friperie" && verifiedBadge && (
-            <span style={{ background: "#3c2f22", color: "#FFC543", fontSize: 11, fontWeight: 800, padding: "3px 10px", borderRadius: 20 }}>✓ VÉRIFIÉ</span>
+            <span style={{ background: "#3c2f22", color: "#FFC543", fontSize: 11, fontWeight: 800, padding: "3px 10px", borderRadius: 20 }}>✓ VERIFIED</span>
           )}
           {accountType === "friperie" && !verifiedBadge && (
-            <span style={{ background: "#f0e2b8", color: "#8a6d2a", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20 }}>🏪 Friperie</span>
+            <span style={{ background: "#f0e2b8", color: "#8a6d2a", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20 }}>🏪 Thrift Store</span>
           )}
         </div>
 
@@ -142,8 +142,8 @@ export default function ProfilePage() {
           <div style={{ margin: "0 20px 14px", background: monthlyPosts >= monthlyTarget ? "#e8f5e0" : "#fff3cd", borderRadius: 16, padding: "10px 16px", border: `1.5px solid ${monthlyPosts >= monthlyTarget ? "#a8d48a" : "#f0c040"}` }}>
             <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: monthlyPosts >= monthlyTarget ? "#3d7a1a" : "#7a5a0a" }}>
               {monthlyPosts >= monthlyTarget
-                ? `✓ ${monthlyPosts} articles publiés ce mois — objectif atteint ! (${monthlyTarget})`
-                : `⚠ ${monthlyPosts} articles publiés ce mois — objectif : ${monthlyTarget}`
+                ? `✓ ${monthlyPosts} items published this month — goal reached! (${monthlyTarget})`
+                : `⚠ ${monthlyPosts} items published this month — goal: ${monthlyTarget}`
               }
             </p>
           </div>

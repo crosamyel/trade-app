@@ -120,7 +120,7 @@ export default function ChatPage() {
 
   async function sendTradeProposal() {
     if (!selectedMine || !selectedTheirs || !me) return;
-    const body = `🔄 Proposition d'échange :\n👕 Mon article : ${selectedMine.title ?? "Article"} (${selectedMine.size ?? "?"})\n👕 Ton article : ${selectedTheirs.title ?? "Article"} (${selectedTheirs.size ?? "?"})`;
+    const body = `🔄 Trade proposal:\n👕 My item: ${selectedMine.title ?? "Item"} (${selectedMine.size ?? "?"})\n👕 Their item: ${selectedTheirs.title ?? "Item"} (${selectedTheirs.size ?? "?"})`;
     await supabase.from("messages").insert({ match_id: matchId, sender_id: me, body });
     setShowProposal(false);
   }
@@ -251,7 +251,7 @@ export default function ChatPage() {
           onClick={openProposal}
           style={{ width: "100%", height: 42, borderRadius: 21, border: "1.5px solid #3c2f22", background: "transparent", color: "#3c2f22", fontWeight: 700, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}
         >
-          🔄 Proposer un échange
+          🔄 Propose a trade
         </button>
       </div>
 
@@ -275,21 +275,21 @@ export default function ChatPage() {
           <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "#F9F4E8", borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: "80dvh", display: "flex", flexDirection: "column" }}>
             {/* En-tête sheet */}
             <div style={{ padding: "16px 20px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <p style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "#3c2f22" }}>Proposer un échange</p>
+              <p style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "#3c2f22" }}>Propose a trade</p>
               <button onClick={() => setShowProposal(false)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 22, color: "#3c2f22", lineHeight: 1 }}>×</button>
             </div>
             {/* Tabs */}
             <div style={{ display: "flex", margin: "12px 20px 0", background: "#ede8dc", borderRadius: 20, padding: 3 }}>
               {(["theirs", "mine"] as const).map((tab) => (
                 <button key={tab} onClick={() => setProposalTab(tab)} style={{ flex: 1, height: 36, borderRadius: 17, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 14, background: proposalTab === tab ? "#3c2f22" : "transparent", color: proposalTab === tab ? "#FFC543" : "#3c2f22", transition: "background 0.15s" }}>
-                  {tab === "theirs" ? `Ses articles` : "Mes articles"}
+                  {tab === "theirs" ? "Their items" : "My items"}
                 </button>
               ))}
             </div>
             {/* Grille articles */}
             <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px" }}>
               {(proposalTab === "mine" ? myItems : theirItems).length === 0
-                ? <p style={{ textAlign: "center", color: "#9b8f7a", fontSize: 14, marginTop: 20 }}>Aucun article disponible</p>
+                ? <p style={{ textAlign: "center", color: "#9b8f7a", fontSize: 14, marginTop: 20 }}>No items available</p>
                 : (
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
                     {(proposalTab === "mine" ? myItems : theirItems).map((item) => {
@@ -301,7 +301,7 @@ export default function ChatPage() {
                           {item.image_url && <img src={item.image_url} alt={item.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
                           {isSelected && <div style={{ position: "absolute", inset: 0, background: "rgba(255,197,67,0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontSize: 22 }}>✓</span></div>}
                           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.45)", padding: "3px 6px" }}>
-                            <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.title ?? "Article"}</p>
+                            <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.title ?? "Item"}</p>
                           </div>
                         </div>
                       );
@@ -313,12 +313,12 @@ export default function ChatPage() {
             {/* Résumé de la sélection */}
             {(selectedMine || selectedTheirs) && (
               <div style={{ padding: "10px 16px 0", display: "flex", gap: 8 }}>
-                {[{ label: "Mon article", item: selectedMine }, { label: "Son article", item: selectedTheirs }].map(({ label, item }) => (
+                {[{ label: "My item", item: selectedMine }, { label: "Their item", item: selectedTheirs }].map(({ label, item }) => (
                   <div key={label} style={{ flex: 1, background: "#ede8dc", borderRadius: 14, padding: "8px 10px", display: "flex", alignItems: "center", gap: 8 }}>
                     {item?.image_url && <img src={item.image_url} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />}
                     <div>
                       <p style={{ margin: 0, fontSize: 10, color: "#9b8f7a", fontWeight: 600 }}>{label}</p>
-                      <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: "#3c2f22" }}>{item ? (item.title ?? "Article") : "—"}</p>
+                      <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: "#3c2f22" }}>{item ? (item.title ?? "Item") : "—"}</p>
                     </div>
                   </div>
                 ))}
@@ -331,7 +331,7 @@ export default function ChatPage() {
                 disabled={!selectedMine || !selectedTheirs}
                 style={{ width: "100%", height: 54, borderRadius: 27, border: "none", background: selectedMine && selectedTheirs ? "#FFC543" : "#e6ddca", color: selectedMine && selectedTheirs ? "#2D1A0A" : "#b3a896", fontWeight: 800, fontSize: 16, cursor: selectedMine && selectedTheirs ? "pointer" : "not-allowed", boxShadow: selectedMine && selectedTheirs ? "0 6px 18px rgba(255,197,67,0.4)" : "none" }}
               >
-                Envoyer la proposition
+                Send proposal
               </button>
             </div>
           </div>

@@ -24,6 +24,16 @@ type Clothing = {
   profiles?: { username?: string; avatar_url?: string } | null;
 };
 
+type UserProfile = {
+  id: string;
+  username?: string;
+  full_name?: string;
+  avatar_url?: string;
+  city?: string;
+  account_type?: string;
+  shop_name?: string;
+};
+
 export default function SearchPage() {
   const router = useRouter();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -42,6 +52,9 @@ export default function SearchPage() {
 
   const [results, setResults] = useState<Clothing[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchMode, setSearchMode] = useState<"items" | "people">("items");
+  const [userResults, setUserResults] = useState<UserProfile[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
 
   const [detail, setDetail] = useState<Clothing | null>(null);
   const [proposingFor, setProposingFor] = useState<Clothing | null>(null);
@@ -129,6 +142,20 @@ export default function SearchPage() {
     return () => clearTimeout(t);
   }, [search, category, style, color, size, condition, price, me]);
 
+  // Recherche de profils (mode "people")
+  useEffect(() => {
+    if (!me || searchMode !== "people") return;
+    setUsersLoading(true);
+    const t = setTimeout(async () => {
+      let q = supabase.from("profiles").select("id, username, avatar_url, city, account_type, shop_name").neq("id", me);
+      if (search.trim()) q = q.ilike("username", `%${search.trim()}%`);
+      const { data } = await q.order("username").limit(30);
+      setUserResults((data as UserProfile[]) ?? []);
+      setUsersLoading(false);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [search, me, searchMode]);
+
   function toCard(it: Clothing): CardData {
     return {
       id: String(it.id), photo: it.image_url ?? "/card-photo-01.png",
@@ -212,14 +239,27 @@ export default function SearchPage() {
             ref={searchRef}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search clothes..."
+            placeholder={searchMode === "people" ? "Search a username…" : "Search clothes..."}
             style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#2D1A0A", fontSize: 15 }}
           />
         </div>
       </div>
 
+      {/* Tabs Items / People */}
+      <div style={{ display: "flex", margin: "14px 18px 0", background: "#EDE8DC", borderRadius: 22, padding: 3, gap: 0 }}>
+        {(["items", "people"] as const).map((mode) => (
+          <button
+            key={mode}
+            onClick={() => setSearchMode(mode)}
+            style={{ flex: 1, height: 38, borderRadius: 19, border: "none", cursor: "pointer", fontWeight: 800, fontSize: 14, background: searchMode === mode ? "#3c2f22" : "transparent", color: searchMode === mode ? "#FFC543" : "#9b8f7a", transition: "background 0.15s, color 0.15s" }}
+          >
+            {mode === "items" ? "Items" : "People"}
+          </button>
+        ))}
+      </div>
+
       {/* Filtres actifs (sélectionnés sur /search/filters) */}
-      {activeFilters.length > 0 && (
+      {searchMode === "items" && activeFilters.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "14px 18px 0" }}>
           {activeFilters.map((f, i) => (
             <button
@@ -236,17 +276,32 @@ export default function SearchPage() {
 
       {/* Résultats */}
       <div style={{ padding: "14px 16px 120px" }}>
-        {loading ? (
-          <p style={{ textAlign: "center", color: "#2D1A0A", opacity: 0.5, marginTop: 30, fontWeight: 600 }}>Searching…</p>
-        ) : results.length === 0 ? (
-          <div style={{ textAlign: "center", marginTop: 50 }}>
-            <div style={{ fontSize: 46, marginBottom: 10 }}>🧥</div>
-            <p style={{ color: "#2D1A0A", opacity: 0.6, fontSize: 15 }}>No clothes found,<br />try different filters</p>
-          </div>
+        {searchMode === "items" ? (
+          loading ? (
+            <p style={{ textAlign: "center", color: "#2D1A0A", opacity: 0.5, marginTop: 30, fontWeight: 600 }}>Searching…</p>
+          ) : results.length === 0 ? (
+            <div style={{ textAlign: "center", marginTop: 50 }}>
+              <div style={{ fontSize: 46, marginBottom: 10 }}>🧥</div>
+              <p style={{ color: "#2D1A0A", opacity: 0.6, fontSize: 15 }}>No clothes found,<br />try different filters</p>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              {results.map((it) => <ResultCard key={String(it.id)} item={it} onClick={() => router.push(`/detail/${it.id}`)} />)}
+            </div>
+          )
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            {results.map((it) => <ResultCard key={String(it.id)} item={it} onClick={() => router.push(`/detail/${it.id}`)} />)}
-          </div>
+          usersLoading ? (
+            <p style={{ textAlign: "center", color: "#2D1A0A", opacity: 0.5, marginTop: 30, fontWeight: 600 }}>Searching…</p>
+          ) : userResults.length === 0 ? (
+            <div style={{ textAlign: "center", marginTop: 50 }}>
+              <div style={{ fontSize: 46, marginBottom: 10 }}>👤</div>
+              <p style={{ color: "#2D1A0A", opacity: 0.6, fontSize: 15 }}>{search.trim() ? "No profile found" : "Search for a username"}</p>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {userResults.map((u) => <ProfileCard key={u.id} user={u} onClick={() => router.push(`/shop/${u.id}`)} />)}
+            </div>
+          )
         )}
       </div>
 
@@ -323,6 +378,46 @@ function ResultCard({ item, onClick }: { item: Clothing; onClick: () => void }) 
           <span style={{ fontSize: 11, color: "#9b8f7a" }}>@{item.profiles?.username ?? "user"}</span>
         </div>
       </div>
+    </button>
+  );
+}
+
+/* ===== Profile Card ===== */
+function ProfileCard({ user, onClick }: { user: UserProfile; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: "flex", alignItems: "center", gap: 14,
+        padding: "14px 16px", border: "none", background: "#F9F4E8",
+        borderRadius: 20, cursor: "pointer", width: "100%", textAlign: "left",
+        boxShadow: "0 3px 12px rgba(0,0,0,0.06)",
+      }}
+    >
+      <div style={{
+        width: 54, height: 54, borderRadius: "50%", flexShrink: 0,
+        background: "#FFC543", overflow: "hidden",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 22, fontWeight: 800, color: "#2D1A0A",
+      }}>
+        {user.avatar_url
+          ? <img src={user.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          : (user.username?.[0] ?? "?").toUpperCase()}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#2D1A0A", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {user.full_name || user.username || "User"}
+        </p>
+        <p style={{ margin: "2px 0 0", fontSize: 13, color: "#9b8f7a" }}>@{user.username ?? "user"}</p>
+        {user.account_type === "shop" && (
+          <span style={{ display: "inline-block", marginTop: 4, fontSize: 11, fontWeight: 700, color: "#fff", background: "#3c2f22", borderRadius: 20, padding: "2px 8px" }}>
+            ✓ Thrift Store
+          </span>
+        )}
+      </div>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, opacity: 0.35 }}>
+        <path d="M9 18l6-6-6-6" stroke="#2D1A0A" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
     </button>
   );
 }
