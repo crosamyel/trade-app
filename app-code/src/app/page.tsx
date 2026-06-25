@@ -35,8 +35,8 @@ export default function StartPage() {
         router.replace("/login");
         return;
       }
-      // Nouvel utilisateur → onboarding direct (sans la page landing)
-      router.replace("/onboarding");
+      // Nouvel utilisateur → landing page d'abord
+      setReady(true);
     }
     check();
   }, [router]);

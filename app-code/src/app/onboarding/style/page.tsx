@@ -49,7 +49,7 @@ export default function OnboardingStyle() {
       {/* Soulignement sous "style" */}
       <div
         className="absolute pointer-events-none"
-        style={{ left: 136, top: 138, width: 96, height: 12 }}
+        style={{ left: 136, top: "calc(138px + env(safe-area-inset-top, 0px))", width: 96, height: 12 }}
       >
         <Image src="/onb-underline-style.png" alt="" fill className="object-contain" />
       </div>

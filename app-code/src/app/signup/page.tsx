@@ -31,7 +31,7 @@ export default function SignupPage() {
     setLoading(true);
     setError("");
     if (accountType === "friperie" && !shopName.trim()) {
-      setError("Merci d'indiquer le nom de ta friperie.");
+      setError("Please enter your thrift store name.");
       setLoading(false);
       return;
     }
@@ -108,19 +108,19 @@ export default function SignupPage() {
         )}
 
         {/* Sélecteur type de compte */}
-        <p style={{ fontSize: 15, fontWeight: 800, color: "#3c2f22", marginBottom: 10 }}>Je suis :</p>
+        <p style={{ fontSize: 15, fontWeight: 800, color: "#3c2f22", marginBottom: 10 }}>I am:</p>
         <div style={{ display: "flex", background: "#ede8dc", borderRadius: 26, padding: 4, marginBottom: 22, border: "2px solid #d4c9b5", boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
           {(["particulier", "friperie"] as const).map((t) => (
             <button key={t} type="button" onClick={() => setAccountType(t)} style={{ flex: 1, height: 48, borderRadius: 22, border: "none", cursor: "pointer", fontWeight: 800, fontSize: 15, background: accountType === t ? "#FFC543" : "transparent", color: accountType === t ? "#3c2f22" : "#9b8f7a", transition: "background 0.15s, color 0.15s", boxShadow: accountType === t ? "0 3px 10px rgba(255,197,67,0.4)" : "none" }}>
-              {t === "particulier" ? "👤 Particulier" : "🏪 Friperie"}
+              {t === "particulier" ? "👤 Individual" : "🏪 Thrift Store"}
             </button>
           ))}
         </div>
 
         {accountType === "friperie" && (
           <>
-            <label style={lbl}>Nom de la friperie</label>
-            <input value={shopName} onChange={e => setShopName(e.target.value)} placeholder="ex: La Belle Friperie" style={inp} />
+            <label style={lbl}>Thrift store name</label>
+            <input value={shopName} onChange={e => setShopName(e.target.value)} placeholder="ex: The Local Thrift" style={inp} />
           </>
         )}
 
@@ -156,7 +156,7 @@ export default function SignupPage() {
         />
 
         {/* Checkboxes RGPD */}
-        <label style={chk} onTouchEnd={() => setAge(a => !a)}>
+        <label style={chk}>
           <input
             type="checkbox" checked={age}
             onChange={e => setAge(e.target.checked)}
@@ -164,7 +164,7 @@ export default function SignupPage() {
           />
           I am at least <strong style={{ marginLeft: 4 }}>16 years old</strong>
         </label>
-        <label style={chk} onTouchEnd={() => setTos(t => !t)}>
+        <label style={chk}>
           <input
             type="checkbox" checked={tos}
             onChange={e => setTos(e.target.checked)}

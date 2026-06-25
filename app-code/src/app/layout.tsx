@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { BottomNav } from "@/components/BottomNav";
 import { PageTransition } from "@/components/PageTransition";
+import { SafeAreaBar } from "@/components/SafeAreaBar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -52,18 +53,8 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-background">
-        {/* Bande brune fixe qui couvre la safe-area-inset-top (Dynamic Island / notch) en PWA */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: "fixed",
-            top: 0, left: 0, right: 0,
-            height: "env(safe-area-inset-top, 0px)",
-            background: "#3c2f22",
-            zIndex: 9999,
-            pointerEvents: "none",
-          }}
-        />
+        {/* Safe-area top bar — cream on landing/onboarding/auth, brown elsewhere */}
+        <SafeAreaBar />
         {/*
           Cadre mobile-first : l'app vit dans une colonne étroite (max ~480px),
           centrée sur grand écran. Tous les écrans s'insèrent dans ce cadre.

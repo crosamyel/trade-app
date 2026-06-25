@@ -38,7 +38,7 @@ export function ProgressBar({ fill }: { fill: number }) {
         transform: "translateX(-50%)",
         width: 305,
         height: 21,
-        background: "#3c2f22",
+        background: "rgba(60,47,34,0.14)",
         borderRadius: 28,
         zIndex: 50,
       }}

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { ProposalSheet } from "@/app/home/page";
@@ -63,6 +63,7 @@ export default function DetailPage() {
   const [myItems, setMyItems] = useState<MyItem[]>([]);
   const [myCoins, setMyCoins] = useState(0);
   const [proposing, setProposing] = useState(false);
+  const touchStartX = useRef<number | null>(null);
 
   useEffect(() => {
     async function init() {
@@ -164,11 +165,34 @@ export default function DetailPage() {
   const cond = condLabel(item.condition);
   const isMyItem = me === item.user_id;
 
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX;
+  }
+
+  function handleTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    touchStartX.current = null;
+    if (Math.abs(dx) < 40) return;
+    if (dx < 0 && photoIndex < photos.length - 1) setPhotoIndex(i => i + 1);
+    if (dx > 0 && photoIndex > 0) setPhotoIndex(i => i - 1);
+  }
+
   return (
-    <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: "#f9f4e8", fontFamily: FONT, minHeight: "100dvh", overflowY: "auto", overflowX: "hidden" }}>
+    <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: "#f9f4e8", fontFamily: FONT, minHeight: "100dvh", overflowY: "auto", overflowX: "hidden", animation: "slideUpDetail 0.38s cubic-bezier(0.4,0,0.2,1) both" }}>
+      <style>{`
+        @keyframes slideUpDetail {
+          from { transform: translateY(40px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+      `}</style>
 
       {/* ===== PHOTO pleine hauteur ===== */}
-      <div style={{ position: "relative", width: "100%", height: "100dvh", background: "#ece6d8", flexShrink: 0 }}>
+      <div
+        style={{ position: "relative", width: "100%", height: "100dvh", background: "#ece6d8", flexShrink: 0 }}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         <img src={currentPhoto} alt={item.title ?? "Item"} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
 
         {/* Gradient bas */}
@@ -235,11 +259,14 @@ export default function DetailPage() {
             {item.condition && <TagPill bg="#a4d4a7" color="#105713">{item.condition}</TagPill>}
             {item.brand && <TagPill bg="#f0e1b1" color="#91691a">{item.brand}</TagPill>}
             {item.style && <TagPill bg="#ede8dc" color="#3c2f22">{item.style}</TagPill>}
-            <TagPill bg="#FFC543" color="#3c2f22">{item.coins_value ?? 20} coins</TagPill>
+            <TagPill bg="#FFC543" color="#3c2f22">{item.coins_value ?? "?"} coins</TagPill>
           </div>
 
-          {/* Carte vendeur */}
-          <div style={{ margin: "16px 14px 0", background: "#3c2f22", borderRadius: 999, padding: "14px 18px 14px 14px", display: "flex", gap: 14, alignItems: "center" }}>
+          {/* Carte vendeur — cliquable pour voir le profil */}
+          <div
+            onClick={() => router.push(`/shop/${item.user_id}`)}
+            style={{ margin: "16px 14px 0", background: "#3c2f22", borderRadius: 999, padding: "14px 18px 14px 14px", display: "flex", gap: 14, alignItems: "center", cursor: "pointer" }}
+          >
             <div style={{ width: 64, height: 64, borderRadius: "50%", background: "#FFC543", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
               {item.profiles?.avatar_url
                 ? <img src={item.profiles.avatar_url} style={{ width: "100%", height: "100%", objectFit: "cover" }} alt="" />
@@ -254,7 +281,7 @@ export default function DetailPage() {
 
           {/* Description */}
           {item.description && (
-            <div style={{ margin: "10px 14px 0", background: "#3c2f22", borderRadius: 999, padding: "16px 24px 18px", textAlign: "center" }}>
+            <div style={{ margin: "10px 14px 0", background: "#3c2f22", borderRadius: 24, padding: "16px 24px 18px", textAlign: "center" }}>
               <p style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 600, color: "rgba(255,185,46,0.9)" }}>Description</p>
               <p style={{ margin: 0, fontSize: 13, color: "rgba(255,255,255,0.74)", lineHeight: 1.6 }}>{item.description}</p>
             </div>
@@ -272,6 +299,7 @@ export default function DetailPage() {
             ) : (
               <>
                 <button
+                  onClick={() => router.push("/matches")}
                   style={{ flex: 1, height: 72, borderRadius: 999, background: "#f9f4e8", border: "2.5px solid #FFC543", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2 }}
                 >
                   <MsgIcon />

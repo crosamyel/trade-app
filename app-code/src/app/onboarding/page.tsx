@@ -44,7 +44,7 @@ export default function OnboardingExplanation() {
       {/* Bulle de dialogue */}
       <div
         className="absolute pointer-events-none"
-        style={{ left: 12, top: "calc(307px + env(safe-area-inset-top, 0px))", width: 378, height: 288 }}
+        style={{ left: 12, top: "calc(360px + env(safe-area-inset-top, 0px))", width: 378, height: 288 }}
       >
         <Image
           src="/onb-speech-bubble.png"
@@ -55,7 +55,7 @@ export default function OnboardingExplanation() {
       </div>
 
       {/* Texte dans la bulle */}
-      <div className="absolute" style={{ top: "calc(330px + env(safe-area-inset-top, 0px))", left: 40, right: 48 }}>
+      <div className="absolute" style={{ top: "calc(383px + env(safe-area-inset-top, 0px))", left: 40, right: 48 }}>
         <p
           style={{
             fontSize: 26,

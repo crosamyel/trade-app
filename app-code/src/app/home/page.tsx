@@ -443,7 +443,7 @@ export function ProposalSheet({ target, myItems, available, toCard, onCancel, on
       animation: "page-fade-in 0.25s ease both",
     }}>
       {/* Header */}
-      <div style={{ background: "#3c2f22", padding: "16px 20px 18px", borderBottomLeftRadius: 24, borderBottomRightRadius: 24, display: "flex", alignItems: "center", gap: 12 }}>
+      <div style={{ background: "#3c2f22", paddingTop: "max(16px, calc(env(safe-area-inset-top, 0px) + 8px))", paddingRight: 20, paddingBottom: 18, paddingLeft: 20, borderBottomLeftRadius: 24, borderBottomRightRadius: 24, display: "flex", alignItems: "center", gap: 12 }}>
         <button onClick={onCancel} style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4 }} aria-label="Back">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M15 5L8 12L15 19" stroke="#ffc543" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>

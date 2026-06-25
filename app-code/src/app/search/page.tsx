@@ -287,10 +287,11 @@ function FilterIcon() {
 /* ===== Carte résultat ===== */
 function condStyle(condition?: string): { label: string; bg: string } {
   const c = (condition ?? "").toLowerCase();
-  if (c.includes("neuf") && !c.includes("comme")) return { label: "Neuf", bg: "#5d8f3c" };
-  if (c.includes("new") && !c.includes("like")) return { label: "Neuf", bg: "#5d8f3c" };
-  if (c.includes("comme") || c.includes("like")) return { label: "Comme neuf", bg: "#3a7bd5" };
-  return { label: "Bon état", bg: "#D97A3A" };
+  if ((c.includes("neuf") && !c.includes("comme")) || (c.includes("new") && !c.includes("like")))
+    return { label: "New", bg: "#5d8f3c" };
+  if (c.includes("comme") || c.includes("like"))
+    return { label: "Like new", bg: "#3a7bd5" };
+  return { label: "Good", bg: "#D97A3A" };
 }
 
 function ResultCard({ item, onClick }: { item: Clothing; onClick: () => void }) {

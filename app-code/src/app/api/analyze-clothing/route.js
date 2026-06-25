@@ -35,17 +35,17 @@ IMPORTANT: Always do your best to analyze the photo, even if the image quality i
 Analyze the image(s) and return ONLY a valid JSON object with no backticks, no markdown, no extra text:
 
 {
-  "category": "clothing type in French (ex: T-shirt, Jean, Veste, Hoodie, Robe, Sneakers, Manteau)",
-  "brand": "brand from label or visible logo, or 'Inconnue'",
-  "size": "size from label (ex: S, M, L, 42, 38) or 'Inconnue'",
-  "color": "main color(s) in French (ex: Noir, Blanc, Bleu marine)",
-  "material": "composition from label (ex: 100% Coton) or 'Inconnue'",
-  "style": "one of: Casual / Streetwear / Vintage / Sport / Formel / Minimaliste",
-  "condition": "one of: Neuf / Comme neuf / Bon état / Usé / Très usé",
-  "description": "Write 4 to 6 sentences in French as a real secondhand seller would. Cover: (1) what it is and brand, (2) color and material feel, (3) honest condition with any visible details like fading, pills, stains, (4) fit and cut, (5) styling suggestion, (6) why it is a good trade. Be specific and genuine. Example: 'Hoodie blanc Nike en taille M, parfait pour un look casual. Composition 80% coton 20% polyester, très doux au toucher. En bon état, légère décoloration du logo après lavage, aucun trou ni tache visible. Coupe légèrement oversize, idéale à porter avec un jean slim ou un jogging. À associer avec des sneakers blanches pour un style sport-chic. Un classique Nike à saisir à prix doux.'",
-  "coins_value": integer between 5 and 150. Calculate realistically based on: brand prestige (luxury like Gucci/Prada/Louis Vuitton/Balenciaga = 80-150, premium streetwear like Supreme/Stone Island/Off-White = 60-100, sportswear like Nike/Adidas/New Balance = 30-60, mainstream like Zara/H&M/Uniqlo = 15-30, no brand = 10-20), condition modifier (Neuf +40%, Comme neuf +25%, Bon état 0%, Usé -20%, Très usé -40%), category weight (coats/jackets higher than t-shirts). Round to nearest 5. Example: Nike hoodie Bon état = 40, Supreme tee Comme neuf = 80, H&M jean Usé = 10.,
-  "counterfeit_warning": boolean — true ONLY if there are clear signs of counterfeiting: logo clearly misaligned, fonts wrong for the brand, stitching quality that screams fake, label inconsistencies. Be conservative — default false when uncertain,
-  "counterfeit_reason": "short reason in French if counterfeit_warning is true, empty string otherwise"
+  "category": "clothing type in English (e.g. T-shirt, Jeans, Jacket, Hoodie, Dress, Sneakers, Coat, Sweatshirt, Blazer, Shorts, Skirt, Shirt)",
+  "brand": "Exact brand name from the label or clearly visible logo. Read the label carefully — exact spelling matters. If no brand is visible, return 'Unknown'. Do NOT guess or invent a brand.",
+  "size": "exact size from the label (e.g. S, M, L, XL, 38, 42) or 'Unknown' if not visible",
+  "color": "main color(s) in English (e.g. Black, White, Navy Blue, Forest Green, Cream)",
+  "material": "fabric composition from label (e.g. 100% Cotton, 80% Polyester 20% Cotton) or 'Unknown'",
+  "style": "one of: Casual / Streetwear / Vintage / Sport / Formal / Minimal",
+  "condition": "one of: New / Like New / Good / Worn / Very Worn — assess honestly based on visible wear, fading, pilling, stains",
+  "description": "Write 4 to 6 sentences in English as a genuine secondhand seller would. Cover: (1) what it is and exact brand/model if known, (2) color and how the fabric feels/looks, (3) honest condition with specific visible details (fading, pills, stains, hardware wear), (4) fit and cut style, (5) how to style it, (6) why it's a good trade. Be specific and genuine — avoid generic phrases. Example: 'White Nike hoodie in size M, classic pullover style with embroidered swoosh. Soft 80% cotton 20% polyester blend, feels substantial and warm. Good condition — slight logo fading from washing, no holes or visible stains. Relaxed fit, slightly oversized, hits at the hip. Pairs perfectly with slim jeans or joggers and white sneakers. A wardrobe staple at a fraction of retail price.'",
+  "coins_value": "integer between 5 and 150. Calculate realistically: brand prestige base (luxury Gucci/Prada/LV/Balenciaga/Moncler = 80-150, premium streetwear Supreme/Stone Island/Off-White/Carhartt = 55-95, sportswear Nike/Adidas/New Balance/Puma = 25-55, fast fashion Zara/H&M/Shein/Primark = 10-25, no brand = 5-15). Then apply condition multiplier (New ×1.5, Like New ×1.25, Good ×1.0, Worn ×0.75, Very Worn ×0.5). Category adjustment (outerwear/coats +15, shoes +10, t-shirts/basics -5). Round to nearest 5. Examples: Nike hoodie Good = 40, Supreme tee Like New = 75, H&M jeans Worn = 10, Gucci belt Good = 110.",
+  "counterfeit_warning": "boolean — true ONLY if there are clear signs of counterfeiting: logo clearly misaligned or wrong font, stitching quality inconsistent with brand standards, label text with typos or wrong country of origin, obvious quality mismatch. Be conservative — default false when uncertain.",
+  "counterfeit_reason": "short reason in English if counterfeit_warning is true, empty string otherwise"
 }
 
 If and ONLY IF the image clearly shows something that is absolutely not a clothing item, return only: {"error":"invalid_image","reason":"brief reason in French"}`
