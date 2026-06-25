@@ -55,7 +55,7 @@ export default function InstallPage() {
           margin: "0 0 10px",
           lineHeight: 1.2,
         }}>
-          Installe TRADE<br />sur ton iPhone
+          Install TRADE<br />on your iPhone
         </h1>
         <p style={{
           fontSize: 15,
@@ -64,7 +64,7 @@ export default function InstallPage() {
           margin: "0 0 36px",
           lineHeight: 1.55,
         }}>
-          Ajoute l&apos;app à ton écran d&apos;accueil pour une expérience plein écran, sans barre Safari.
+          Add the app to your home screen for a full-screen experience — no browser bar.
         </p>
 
         {/* Steps */}
@@ -72,26 +72,26 @@ export default function InstallPage() {
           <Step
             num={1}
             icon={<SafariIcon />}
-            title="Ouvre dans Safari"
-            desc="Cette page doit être ouverte dans Safari (pas Chrome ou autre navigateur)"
+            title="Open in Safari"
+            desc="This page must be opened in Safari (not Chrome or another browser)"
           />
           <Step
             num={2}
             icon={<ShareIcon />}
-            title='Appuie sur "Partager"'
-            desc="Le bouton carré avec une flèche vers le haut, en bas de l'écran Safari"
+            title='Tap "Share"'
+            desc="The square button with an arrow pointing up, at the bottom of the Safari screen"
           />
           <Step
             num={3}
-            icon={<HomeIcon />}
-            title={"\"Sur l'écran d'accueil\""}
-            desc={"Fais défiler le menu vers le bas et appuie sur \"Sur l'écran d'accueil\""}
+            icon={<AddHomeIcon />}
+            title='"Add to Home Screen"'
+            desc='Scroll down in the menu and tap "Add to Home Screen"'
           />
           <Step
             num={4}
             icon={<CheckIcon />}
-            title='Appuie sur "Ajouter"'
-            desc="TRADE apparaît sur ton écran d'accueil comme une vraie application"
+            title='Tap "Add"'
+            desc="TRADE will appear on your home screen just like a real native app"
           />
         </div>
 
@@ -105,11 +105,10 @@ export default function InstallPage() {
           width: "100%",
         }}>
           <p style={{ margin: 0, fontSize: 13, color: "#8a6d2a", lineHeight: 1.5, textAlign: "center", fontWeight: 600 }}>
-            💡 Une fois installée, l&apos;app s&apos;ouvre en plein écran, sans barre Safari — exactement comme une app native.
+            💡 Once installed, the app opens full screen with no browser bar — exactly like a native app.
           </p>
         </div>
 
-        {/* Yellow accent bottom */}
       </div>
 
       <div style={{ marginTop: "auto", height: 8, background: "#ffc543", flexShrink: 0 }} />
@@ -186,11 +185,19 @@ function ShareIcon() {
   );
 }
 
-function HomeIcon() {
+/* "Add to Home Screen" icon — phone with a home screen app grid + plus badge */
+function AddHomeIcon() {
   return (
     <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-      <rect x="3" y="3" width="18" height="18" rx="5" stroke="#fff" strokeWidth="2"/>
-      <path d="M12 8v4M10 12h4" stroke="#FFC543" strokeWidth="2.2" strokeLinecap="round"/>
+      {/* Phone outline */}
+      <rect x="5" y="2" width="14" height="20" rx="3" stroke="#fff" strokeWidth="2"/>
+      {/* App grid dots */}
+      <circle cx="9" cy="10" r="1.5" fill="#fff" opacity="0.5"/>
+      <circle cx="15" cy="10" r="1.5" fill="#fff" opacity="0.5"/>
+      <circle cx="9" cy="15" r="1.5" fill="#fff" opacity="0.5"/>
+      {/* Plus sign where the new app icon goes */}
+      <circle cx="15" cy="15" r="3.5" fill="#FFC543"/>
+      <path d="M15 13.5v3M13.5 15h3" stroke="#3c2f22" strokeWidth="1.8" strokeLinecap="round"/>
     </svg>
   );
 }
