@@ -27,6 +27,7 @@ export default function WalletPage() {
   const [balance, setBalance] = useState<number | null>(null);
   const [reserved, setReserved] = useState(0);
   const [txs, setTxs] = useState<Tx[]>([]);
+  const [toast, setToast] = useState("");
 
   useEffect(() => {
     async function init() {
@@ -111,7 +112,7 @@ export default function WalletPage() {
         <h2 style={{ fontSize: 20, fontWeight: 800, color: "#2D1A0A", margin: "26px 0 12px" }}>Buy coins</h2>
         <div style={{ display: "flex", gap: 10 }}>
           {PACKS.map((p) => (
-            <div key={p.coins} style={{ position: "relative", flex: 1, borderRadius: 16, border: "1.5px solid #E8E4DC", background: p.popular ? "#FFF8E7" : "#F9F4E8", padding: "18px 6px 14px", textAlign: "center", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}>
+            <button key={p.coins} onClick={() => { setToast("Coming soon — payments will be available shortly 🪙"); setTimeout(() => setToast(""), 2800); }} style={{ position: "relative", flex: 1, borderRadius: 16, border: "1.5px solid #E8E4DC", background: p.popular ? "#FFF8E7" : "#F9F4E8", padding: "18px 6px 14px", textAlign: "center", boxShadow: "0 4px 12px rgba(0,0,0,0.08)", cursor: "pointer" }}>
               {p.popular && (
                 <span style={{ position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)", whiteSpace: "nowrap", fontSize: 10, fontWeight: 700, color: "#8a6d2a", background: "#FFE9A8", borderRadius: 12, padding: "2px 8px" }}>⭐ Most popular</span>
               )}
@@ -120,7 +121,7 @@ export default function WalletPage() {
                 <span style={{ position: "relative", display: "inline-block", width: 16, height: 16 }}><Image src="/coin.png" alt="" fill style={{ objectFit: "contain" }} /></span>
               </div>
               <div style={{ fontSize: 13, color: "#D97A3A", marginTop: 6, fontWeight: 600 }}>{p.price}</div>
-            </div>
+            </button>
           ))}
         </div>
 
@@ -135,6 +136,9 @@ export default function WalletPage() {
           )}
         </div>
       </div>
+      {toast && (
+        <div style={{ position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", background: "#2D1A0A", color: "#FFC543", fontWeight: 700, fontSize: 14, padding: "12px 20px", borderRadius: 24, zIndex: 95, whiteSpace: "nowrap", boxShadow: "0 4px 18px rgba(0,0,0,0.3)", maxWidth: "calc(100% - 40px)", textAlign: "center" }}>{toast}</div>
+      )}
     </div>
   );
 }
@@ -144,7 +148,7 @@ function TxRow({ tx }: { tx: Tx }) {
   const positive = !pending && (tx.amount ?? 0) >= 0;
   const bg = pending ? "#F9F4E8" : positive ? "#D4EDDA" : "#F8D7DA";
   const amtColor = pending ? "#2D1A0A" : positive ? "#2e7d32" : "#c0392b";
-  const date = tx.created_at ? new Date(tx.created_at).toLocaleDateString("fr-BE") : "";
+  const date = tx.created_at ? new Date(tx.created_at).toLocaleDateString("en-GB") : "";
   const amt = tx.amount ?? 0;
 
   return (
@@ -153,7 +157,6 @@ function TxRow({ tx }: { tx: Tx }) {
       <div style={{ background: bg, borderRadius: 20, padding: "14px 18px", display: "flex", alignItems: "center", gap: 10, boxShadow: "0 4px 12px rgba(0,0,0,0.07)" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: "#2D1A0A" }}>{tx.description ?? "Transaction"}</span>
-          <a href="#" style={{ marginLeft: 8, fontSize: 12, color: "#2D1A0A", opacity: 0.6, textDecoration: "underline" }}>See article</a>
         </div>
         <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 15, fontWeight: 800, color: amtColor, whiteSpace: "nowrap" }}>
           {pending && <span style={{ opacity: 0.6 }}>⏳</span>}

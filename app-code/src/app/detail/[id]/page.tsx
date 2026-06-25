@@ -260,7 +260,7 @@ export default function DetailPage() {
           {/* Tags */}
           <div style={{ padding: "12px 16px 0", display: "flex", gap: 8, flexWrap: "wrap" }}>
             {item.size && <TagPill bg="#3c2f22" color="#fff">Size {item.size}</TagPill>}
-            {item.condition && <TagPill bg="#a4d4a7" color="#105713">{item.condition}</TagPill>}
+            {item.condition && <TagPill bg={cond.bg} color="#fff">{cond.label}</TagPill>}
             {item.brand && <TagPill bg="#f0e1b1" color="#91691a">{item.brand}</TagPill>}
             {item.style && <TagPill bg="#ede8dc" color="#3c2f22">{item.style}</TagPill>}
             <TagPill bg="#FFC543" color="#3c2f22">{item.coins_value ?? "?"} coins</TagPill>

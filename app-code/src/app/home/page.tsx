@@ -142,6 +142,7 @@ export default function HomePage() {
   function advance() {
     setExitDir(null);
     setDragX(0); dragXRef.current = 0;
+    setSaved(false);
     setCurrentIndex((i) => i + 1);
   }
 

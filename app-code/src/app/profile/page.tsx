@@ -28,6 +28,8 @@ export default function ProfilePage() {
   const [verifiedBadge, setVerifiedBadge] = useState(false);
   const [monthlyTarget, setMonthlyTarget] = useState<number | null>(null);
   const [monthlyPosts, setMonthlyPosts] = useState(0);
+  const [memberSince, setMemberSince] = useState("2025");
+  const [toast, setToast] = useState("");
 
   useEffect(() => {
     async function init() {
@@ -36,6 +38,7 @@ export default function ProfilePage() {
 
       setInitial((user.email?.[0] ?? "?").toUpperCase());
       setName(user.email?.split("@")[0] ?? "My profile");
+      if (user.created_at) setMemberSince(new Date(user.created_at).getFullYear().toString());
 
       // Profile (username, coins, city, bio) — select * so a missing column won't crash
       try {
@@ -117,9 +120,9 @@ export default function ProfilePage() {
             <div style={{ position: "relative", width: 100, height: 100, borderRadius: "50%", background: "#FFC543", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 6px 18px rgba(255,197,67,0.5)" }}>
               <span style={{ color: "#fff", fontSize: 48, fontWeight: 800 }}>{initial}</span>
               {/* Camera */}
-              <div style={{ position: "absolute", bottom: 2, right: 2, width: 28, height: 28, borderRadius: "50%", background: "#2D1A0A", display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid #F9F4E8" }}>
+              <button onClick={() => { setToast("Photo upload coming soon 📷"); setTimeout(() => setToast(""), 2500); }} style={{ position: "absolute", bottom: 2, right: 2, width: 28, height: 28, borderRadius: "50%", background: "#2D1A0A", border: "2px solid #F9F4E8", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
                 <CameraMini />
-              </div>
+              </button>
             </div>
           </div>
         </div>
@@ -151,7 +154,7 @@ export default function ProfilePage() {
 
         {/* Info */}
         <div style={{ display: "flex", gap: 14, justifyContent: "center", marginBottom: 18, padding: "0 6px" }}>
-          <p style={{ margin: 0, fontSize: 13, color: "#2D1A0A", opacity: 0.7, lineHeight: 1.4, maxWidth: 150 }}>{city}, member since 2025</p>
+          <p style={{ margin: 0, fontSize: 13, color: "#2D1A0A", opacity: 0.7, lineHeight: 1.4, maxWidth: 150 }}>{city}, member since {memberSince}</p>
           <div style={{ width: 1, background: "rgba(45,26,10,0.2)" }} />
           <p style={{ margin: 0, fontSize: 13, color: "#2D1A0A", opacity: 0.7, lineHeight: 1.4, maxWidth: 150, fontStyle: "italic" }}>&quot;{bio}&quot;</p>
         </div>
@@ -207,6 +210,9 @@ export default function ProfilePage() {
           <p style={{ textAlign: "center", color: "#2D1A0A", opacity: 0.5, marginTop: 30, fontSize: 14 }}>No completed trades yet.</p>
         )}
       </div>
+      {toast && (
+        <div style={{ position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", background: "#2D1A0A", color: "#FFC543", fontWeight: 700, fontSize: 14, padding: "10px 18px", borderRadius: 22, zIndex: 95 }}>{toast}</div>
+      )}
     </div>
   );
 }

@@ -213,7 +213,7 @@ export default function MultiUploadPage() {
               <div style={{ marginBottom: 14 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
                   <label style={{ fontSize: 13, color: "#7a6f5d", fontWeight: 600 }}>Description</label>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "#3a7bd5" }}>🔒 IA</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#3a7bd5" }}>🔒 AI</span>
                 </div>
                 <div style={{ background: "#eef4fb", borderRadius: 16, padding: "10px 14px", border: "1.5px solid #c5d9ef" }}>
                   <p style={{ margin: 0, fontSize: 13, color: "#2A2A2A", lineHeight: 1.6 }}>{current.description}</p>

@@ -214,13 +214,15 @@ export default function SearchPage() {
 
       {/* Titre "Explore" centré + icône filtres à gauche */}
       <div style={{ position: "relative", height: 44, marginTop: 18, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <button
-          onClick={openFilters}
-          style={{ position: "absolute", left: 18, top: "50%", transform: "translateY(-50%)", width: 40, height: 40, borderRadius: 14, background: activeFilters.length > 0 ? "#FFC543" : "#E8E4DC", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-          aria-label="Filters"
-        >
-          <FilterIcon />
-        </button>
+        {searchMode === "items" && (
+          <button
+            onClick={openFilters}
+            style={{ position: "absolute", left: 18, top: "50%", transform: "translateY(-50%)", width: 40, height: 40, borderRadius: 14, background: activeFilters.length > 0 ? "#FFC543" : "#E8E4DC", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+            aria-label="Filters"
+          >
+            <FilterIcon />
+          </button>
+        )}
         <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, fontStyle: "italic", color: "#2D1A0A" }}>Explore</h1>
       </div>
 

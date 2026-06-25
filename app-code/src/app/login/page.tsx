@@ -13,6 +13,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
+  const [resetSent, setResetSent] = useState(false);
   const router = useRouter();
 
   async function handleLogin() {
@@ -48,6 +49,16 @@ export default function LoginPage() {
       options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
     if (error) setError("Google: " + error.message);
+  }
+
+  async function handleForgotPassword() {
+    if (!email.trim()) { setError("Enter your email above first."); return; }
+    setError("");
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/auth/callback`,
+    });
+    if (error) setError(error.message);
+    else setResetSent(true);
   }
 
   async function handleFacebook() {
@@ -113,13 +124,19 @@ export default function LoginPage() {
           style={{ ...inp, marginBottom: 0 }}
         />
 
-        <a href="#" style={{
-          display: "block", textAlign: "right", fontSize: 13,
-          color: "#3c2f22", textDecoration: "underline",
-          marginTop: 10, marginBottom: 24,
-        }}>
-          Forgot password?
-        </a>
+        {resetSent ? (
+          <p style={{ fontSize: 13, color: "#5d8f3c", fontWeight: 600, textAlign: "right", marginTop: 10, marginBottom: 24 }}>
+            ✓ Reset link sent — check your email
+          </p>
+        ) : (
+          <button type="button" onClick={handleForgotPassword} style={{
+            display: "block", textAlign: "right", fontSize: 13, width: "100%",
+            color: "#3c2f22", textDecoration: "underline",
+            marginTop: 10, marginBottom: 24, background: "none", border: "none", cursor: "pointer", padding: 0,
+          }}>
+            Forgot password?
+          </button>
+        )}
 
         {/* Séparateur */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "8px 0 20px" }}>
