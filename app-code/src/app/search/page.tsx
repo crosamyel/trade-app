@@ -286,11 +286,15 @@ function FilterIcon() {
 
 /* ===== Carte résultat ===== */
 function condStyle(condition?: string): { label: string; bg: string } {
-  const c = (condition ?? "").toLowerCase();
-  if ((c.includes("neuf") && !c.includes("comme")) || (c.includes("new") && !c.includes("like")))
-    return { label: "New", bg: "#5d8f3c" };
-  if (c.includes("comme") || c.includes("like"))
-    return { label: "Like new", bg: "#3a7bd5" };
+  const c = (condition ?? "").toLowerCase().replace(/[^a-z_]/g, "");
+  if (c === "new") return { label: "New", bg: "#5d8f3c" };
+  if (c === "like_new" || c === "likenew") return { label: "Like new", bg: "#3a7bd5" };
+  if (c === "good") return { label: "Good", bg: "#D97A3A" };
+  if (c === "used") return { label: "Used", bg: "#8f6c3c" };
+  if (c === "worn") return { label: "Worn", bg: "#7a3c3c" };
+  // Legacy French values
+  if (condition?.includes("neuf") && !condition?.includes("comme")) return { label: "New", bg: "#5d8f3c" };
+  if (condition?.includes("comme") || condition?.includes("like")) return { label: "Like new", bg: "#3a7bd5" };
   return { label: "Good", bg: "#D97A3A" };
 }
 

@@ -12,6 +12,7 @@ const FONT = "'Helvetica Neue', Helvetica, Arial, sans-serif";
 /* Données extraites par l'IA. Les 4 premières sont affichées dans le formulaire ;
    brand/material/style/description sont gardées pour l'insert DB futur. */
 type Analysis = {
+  title: string;
   category: string;
   size: string;
   color: string;
@@ -21,14 +22,14 @@ type Analysis = {
   style: string;
   description: string;
   coins_value: number | null;
-  counterfeit_warning: boolean;
-  counterfeit_reason: string;
+  fake_warning: boolean;
+  fake_reason: string | null;
 };
 
 const EMPTY_ANALYSIS: Analysis = {
-  category: "", size: "", color: "", condition: "",
+  title: "", category: "", size: "", color: "", condition: "",
   brand: "", material: "", style: "", description: "",
-  coins_value: null, counterfeit_warning: false, counterfeit_reason: "",
+  coins_value: null, fake_warning: false, fake_reason: null,
 };
 
 /* Les 4 slots photo : front + back + label obligatoires, detail optionnel */
@@ -44,17 +45,18 @@ export default function UploadPage() {
   // Reçoit les données IA et passe à l'étape 3
   function handleAnalysisDone(data: Partial<Analysis>) {
     setAnalysis({
-      category:             data.category             ?? "",
-      size:                 data.size                 ?? "",
-      color:                data.color                ?? "",
-      condition:            data.condition            ?? "",
-      brand:                data.brand                ?? "",
-      material:             data.material             ?? "",
-      style:                data.style                ?? "",
-      description:          data.description          ?? "",
-      coins_value:          data.coins_value          ?? null,
-      counterfeit_warning:  data.counterfeit_warning  ?? false,
-      counterfeit_reason:   data.counterfeit_reason   ?? "",
+      title:        data.title        ?? "",
+      category:     data.category     ?? "",
+      size:         data.size         ?? "",
+      color:        data.color        ?? "",
+      condition:    data.condition    ?? "",
+      brand:        data.brand        ?? "",
+      material:     data.material     ?? "",
+      style:        data.style        ?? "",
+      description:  data.description  ?? "",
+      coins_value:  data.coins_value  ?? null,
+      fake_warning: data.fake_warning ?? false,
+      fake_reason:  data.fake_reason  ?? null,
     });
     setStep(3);
   }
@@ -335,17 +337,18 @@ function StepAnalyse({ photos, onDone }: {
           }
         } else if (res.ok) {
           analysisData = {
-            category:            data.category            || "",
-            size:                data.size                || "",
-            color:               data.color               || "",
-            condition:           data.condition           || "",
-            brand:               data.brand               || "",
-            material:            data.material            || "",
-            style:               data.style               || "",
-            description:         data.description         || "",
-            coins_value:         typeof data.coins_value === 'number' ? data.coins_value : null,
-            counterfeit_warning: data.counterfeit_warning === true,
-            counterfeit_reason:  data.counterfeit_reason  || "",
+            title:        data.title        || "",
+            category:     data.category     || "",
+            size:         data.size         || "",
+            color:        data.color        || "",
+            condition:    data.condition    || "",
+            brand:        data.brand        || "",
+            material:     data.material     || "",
+            style:        data.style        || "",
+            description:  data.description  || "",
+            coins_value:  typeof data.coins_value === 'number' ? data.coins_value : null,
+            fake_warning: data.fake_warning === true,
+            fake_reason:  data.fake_reason  || null,
           };
         } else {
           if (!cancelled) { console.error("AI error:", data); setFailed(true); }
@@ -406,18 +409,40 @@ function CheckRow({ state, label }: { state: "done" | "active" | "idle"; label: 
   );
 }
 
-/* Calcule le nombre de coins selon condition + marque */
-function calculateCoins(condition: string, brand: string): number {
-  let base = 15;
-  const c = condition.toLowerCase();
-  if (c === "neuf" || c === "new")                    base = 40;
-  else if (c === "comme neuf" || c === "like new")    base = 30;
-  else if (c === "bon état" || c === "used")          base = 20;
-  else if (c === "usé" || c === "worn")               base = 10;
+/* Calcule les coins selon la formule officielle (fallback si l'IA ne renvoie pas coins_value) */
+function calculateCoins(condition: string, brand: string, category: string): number {
+  // Base par catégorie
+  const cat = category.toLowerCase();
+  let base = 20;
+  if (cat.includes("outerwear") || cat.includes("jacket") || cat.includes("coat")) base = 40;
+  else if (cat.includes("shoes") || cat.includes("sneakers") || cat.includes("boots")) base = 35;
+  else if (cat.includes("dress")) base = 30;
+  else if (cat.includes("bottom") || cat.includes("jeans") || cat.includes("pant")) base = 25;
+  else if (cat.includes("sport")) base = 25;
+  else if (cat.includes("accessori") || cat.includes("bag") || cat.includes("belt")) base = 20;
 
-  const premiumBrands = ["nike","adidas","zara","h&m","stone island","supreme","palace","carhartt","levi","ralph lauren","tommy hilfiger"];
-  if (brand && premiumBrands.some(b => brand.toLowerCase().includes(b))) base += 10;
-  return Math.min(base, 100);
+  // Multiplicateur marque
+  const b = brand.toLowerCase();
+  let brandMult = 1.0;
+  const luxury = ["gucci","louis vuitton","lv","prada","balenciaga","off-white","dior","versace","moncler","ysl","saint laurent","bottega","fendi"];
+  const premium = ["ralph lauren","tommy hilfiger","calvin klein","hugo boss","lacoste","burberry","armani","boss"];
+  const popular = ["nike","adidas","zara","h&m","levi","north face","stone island","carhartt","new balance","puma","reebok","jordan","converse","vans","champion"];
+  const fastFashion = ["primark","shein","boohoo","forever 21","asos","prettylittlething","missguided"];
+  if (luxury.some(l => b.includes(l))) brandMult = 4.0;
+  else if (premium.some(p => b.includes(p))) brandMult = 2.5;
+  else if (popular.some(p => b.includes(p))) brandMult = 1.8;
+  else if (fastFashion.some(f => b.includes(f))) brandMult = 0.8;
+
+  // Multiplicateur état
+  const c = condition.toLowerCase();
+  let condMult = 1.0;
+  if (c === "new") condMult = 2.0;
+  else if (c === "like_new") condMult = 1.6;
+  else if (c === "good") condMult = 1.2;
+  else if (c === "used") condMult = 0.8;
+  else if (c === "worn") condMult = 0.5;
+
+  return Math.min(500, Math.max(5, Math.round(base * brandMult * condMult)));
 }
 
 /* ===== ÉTAPE 3 — VERIFY ===== */
@@ -430,7 +455,7 @@ function StepVerify({ photos, analysis, setAnalysis }: {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const coinsValue = analysis.coins_value ?? calculateCoins(analysis.condition, analysis.brand);
+  const coinsValue = analysis.coins_value ?? calculateCoins(analysis.condition, analysis.brand, analysis.category);
 
   const canSubmit = !!photos.front && !!photos.back && !!photos.label;
 
@@ -486,7 +511,7 @@ function StepVerify({ photos, analysis, setAnalysis }: {
 
       const insertData = {
         user_id:          user.id,
-        title:            analysis.category || "Item",
+        title:            analysis.title || analysis.category || "Item",
         brand:            analysis.brand    || null,
         size:             analysis.size     || null,
         condition:        analysis.condition || null,
@@ -527,31 +552,31 @@ function StepVerify({ photos, analysis, setAnalysis }: {
       <PhotoRow photos={photos} />
 
       {/* Statut IA */}
-      <div style={{ marginTop: 14, marginBottom: analysis.counterfeit_warning ? 10 : 18, background: aiWorked ? "#d6edd4" : "#f3d3cf", borderRadius: 16, padding: "10px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ marginTop: 14, marginBottom: analysis.fake_warning ? 10 : 18, background: aiWorked ? "#d6edd4" : "#f3d3cf", borderRadius: 16, padding: "10px 16px", display: "flex", alignItems: "center", gap: 10 }}>
         <span style={{ fontSize: 18 }}>{aiWorked ? "✅" : "⚠️"}</span>
         <span style={{ fontSize: 13, fontWeight: 600, color: aiWorked ? "#2d6a2a" : "#7a2e26" }}>
           {aiWorked
-            ? "Champs pré-remplis par l'IA — vérifie et modifie si besoin."
-            : "L'IA n'a pas pu analyser la photo. Remplis les champs manuellement."}
+            ? "Fields pre-filled by AI — check and edit if needed."
+            : "AI couldn't analyze the photo. Fill in the fields manually."}
         </span>
       </div>
 
       {/* Alerte contrefaçon */}
-      {analysis.counterfeit_warning && (
+      {analysis.fake_warning && (
         <div style={{ marginBottom: 18, background: "#fef3c7", borderRadius: 16, padding: "12px 16px", display: "flex", alignItems: "flex-start", gap: 10, border: "1.5px solid #f59e0b" }}>
           <span style={{ fontSize: 20, flexShrink: 0 }}>⚠️</span>
           <div>
-            <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: "#92400e" }}>Attention — possible contrefaçon</p>
-            {analysis.counterfeit_reason && (
-              <p style={{ margin: "4px 0 0", fontSize: 12, color: "#92400e", lineHeight: 1.4 }}>{analysis.counterfeit_reason}</p>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: "#92400e" }}>Warning — possible counterfeit</p>
+            {analysis.fake_reason && (
+              <p style={{ margin: "4px 0 0", fontSize: 12, color: "#92400e", lineHeight: 1.4 }}>{analysis.fake_reason}</p>
             )}
-            <p style={{ margin: "4px 0 0", fontSize: 11, color: "#a16207", lineHeight: 1.4 }}>Tu peux quand même publier, mais sois honnête dans ta description.</p>
+            <p style={{ margin: "4px 0 0", fontSize: 11, color: "#a16207", lineHeight: 1.4 }}>You can still publish, but be honest in your description.</p>
           </div>
         </div>
       )}
 
       <div>
-        <Field label="Titre *" value={analysis.category} onChange={(v) => setAnalysis({ ...analysis, category: v })} placeholder="ex: Hoodie noir Nike" />
+        <Field label="Title *" value={analysis.title || analysis.category} onChange={(v) => setAnalysis({ ...analysis, title: v })} placeholder="ex: Nike Black Hoodie" />
         <div style={{ display: "flex", gap: 10 }}>
           <div style={{ flex: 1 }}><Field label="Marque" value={analysis.brand} onChange={(v) => setAnalysis({ ...analysis, brand: v })} placeholder="ex: Nike" /></div>
           <div style={{ flex: 1 }}><Field label="Taille" value={analysis.size} onChange={(v) => setAnalysis({ ...analysis, size: v })} placeholder="ex: M" /></div>
