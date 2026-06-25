@@ -16,7 +16,7 @@ export default function ProfilePage() {
   const [initial, setInitial] = useState("?");
   const [coins, setCoins] = useState(0);
   const [items, setItems] = useState<Item[]>([]);
-  const [tab, setTab] = useState<"articles" | "done">("articles");
+  const [tab, setTab] = useState<"articles" | "saved" | "done">("articles");
   const [city, setCity] = useState("Brussels");
   const [bio, setBio] = useState("I would like to trade clothes, what do you got?");
   const [articlesCount, setArticlesCount] = useState(0);
@@ -29,6 +29,7 @@ export default function ProfilePage() {
   const [monthlyTarget, setMonthlyTarget] = useState<number | null>(null);
   const [monthlyPosts, setMonthlyPosts] = useState(0);
   const [memberSince, setMemberSince] = useState("2025");
+  const [savedItems, setSavedItems] = useState<Item[]>([]);
   const [toast, setToast] = useState("");
 
   useEffect(() => {
@@ -59,6 +60,17 @@ export default function ProfilePage() {
         .from("clothing").select("*")
         .eq("user_id", user.id).order("created_at", { ascending: false });
       setItems((clothes as Item[]) ?? []);
+
+      // Saved / liked items
+      try {
+        const { data: likeRows } = await supabase
+          .from("likes").select("clothing_id").eq("user_id", user.id);
+        const ids = (likeRows ?? []).map((l: { clothing_id: string | number }) => l.clothing_id);
+        if (ids.length > 0) {
+          const { data: saved } = await supabase.from("clothing").select("*").in("id", ids);
+          setSavedItems((saved as Item[]) ?? []);
+        }
+      } catch { /* likes table optional */ }
 
       // Posts ce mois-ci (pour friperies)
       const now = new Date();
@@ -189,8 +201,9 @@ export default function ProfilePage() {
         </div>
 
         {/* Tabs */}
-        <div style={{ display: "flex", gap: 24, borderBottom: "1px solid rgba(45,26,10,0.12)", marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 20, borderBottom: "1px solid rgba(45,26,10,0.12)", marginBottom: 14 }}>
           <Tab label="My articles" active={tab === "articles"} onClick={() => setTab("articles")} />
+          <Tab label="★ Saved" active={tab === "saved"} onClick={() => setTab("saved")} />
           <Tab label="Trades done" active={tab === "done"} onClick={() => setTab("done")} />
         </div>
 
@@ -204,6 +217,34 @@ export default function ProfilePage() {
             <div style={{ textAlign: "center", marginTop: 24 }}>
               <p style={{ color: "#2D1A0A", opacity: 0.55, fontSize: 14, marginBottom: 14 }}>You don&apos;t have any articles yet.</p>
               <button onClick={() => router.push("/upload")} style={{ height: 46, padding: "0 22px", borderRadius: 23, background: "#FFC543", border: "none", color: "#2D1A0A", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>+ Add an item</button>
+            </div>
+          )
+        ) : tab === "saved" ? (
+          savedItems.length > 0 ? (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+              {savedItems.map((it) => (
+                <button
+                  key={String(it.id)}
+                  onClick={() => router.push(`/detail/${it.id}`)}
+                  style={{ padding: 0, border: "none", background: "#F9F4E8", borderRadius: 16, overflow: "hidden", cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", textAlign: "left" }}
+                >
+                  <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1", background: "#ece6d8" }}>
+                    {it.image_url && <img src={it.image_url} alt={it.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                  </div>
+                  <div style={{ padding: "6px 8px 8px" }}>
+                    <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: "#2D1A0A", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.title ?? "Item"}</p>
+                    <span style={{ display: "flex", alignItems: "center", gap: 2, fontSize: 11, fontWeight: 700, color: "#2D1A0A", marginTop: 2 }}>
+                      {it.price_coins ?? "?"}
+                      <span style={{ position: "relative", display: "inline-block", width: 11, height: 11 }}><Image src="/coin.png" alt="" fill style={{ objectFit: "contain" }} /></span>
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div style={{ textAlign: "center", marginTop: 30 }}>
+              <div style={{ fontSize: 36, marginBottom: 10 }}>⭐</div>
+              <p style={{ color: "#2D1A0A", opacity: 0.55, fontSize: 14 }}>No saved items yet.<br />Tap the star on any item to save it.</p>
             </div>
           )
         ) : (

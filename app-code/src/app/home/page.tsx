@@ -286,7 +286,10 @@ export default function HomePage() {
       {/* ===== SCRIBBLE ===== */}
       <div
         style={{
-          position: "absolute", top: "calc(56px + max(env(safe-area-inset-top), 44px))", left: -30,
+          position: "absolute",
+          top: "calc(56px + max(env(safe-area-inset-top), 44px))",
+          left: "50%",
+          transform: "translateX(-50%)",
           width: 460, height: 310,
           zIndex: 2, pointerEvents: "none", opacity: 0.85,
         }}
@@ -373,7 +376,22 @@ export default function HomePage() {
         </button>
 
         <button
-          onClick={() => setSaved((s) => !s)}
+          onClick={async () => {
+            if (!current || !currentUser) return;
+            if (!saved) {
+              setSaved(true);
+              await supabase.from("likes").upsert(
+                { user_id: currentUser.id, clothing_id: current.id },
+                { onConflict: "user_id,clothing_id" }
+              );
+            } else {
+              setSaved(false);
+              await supabase.from("likes")
+                .delete()
+                .eq("user_id", currentUser.id)
+                .eq("clothing_id", current.id);
+            }
+          }}
           style={{ background: "transparent", border: "none", cursor: "pointer", padding: 2 }}
         >
           <StarIcon filled={saved} />

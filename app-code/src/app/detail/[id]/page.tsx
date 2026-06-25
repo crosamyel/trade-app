@@ -75,6 +75,13 @@ export default function DetailPage() {
       if (!user) { router.replace("/login"); return; }
       setMe(user.id);
 
+      // Check if already saved
+      try {
+        const { data: like } = await supabase.from("likes")
+          .select("id").eq("user_id", user.id).eq("clothing_id", id).maybeSingle();
+        if (like) setSaved(true);
+      } catch { /* likes optional */ }
+
       // Article + profil vendeur
       let clothingData: Clothing | null = null;
       const joined = await supabase
@@ -216,7 +223,19 @@ export default function DetailPage() {
               <path d="M21 8H1M1 8L8 1M1 8L8 15" stroke="#3c2f22" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
-          <button onClick={() => setSaved(s => !s)} style={{ width: 42, height: 42, borderRadius: "50%", background: "rgba(255,255,255,0.88)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(8px)", boxShadow: "0 2px 10px rgba(0,0,0,0.15)" }}>
+          <button onClick={async () => {
+            if (!me || !item) return;
+            if (!saved) {
+              setSaved(true);
+              await supabase.from("likes").upsert(
+                { user_id: me, clothing_id: item.id },
+                { onConflict: "user_id,clothing_id" }
+              );
+            } else {
+              setSaved(false);
+              await supabase.from("likes").delete().eq("user_id", me).eq("clothing_id", item.id);
+            }
+          }} style={{ width: 42, height: 42, borderRadius: "50%", background: "rgba(255,255,255,0.88)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(8px)", boxShadow: "0 2px 10px rgba(0,0,0,0.15)" }}>
             <StarIcon filled={saved} />
           </button>
         </div>
