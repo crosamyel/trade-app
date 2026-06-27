@@ -24,6 +24,13 @@ type TradeAddress = {
   city?: string; postal_code?: string; country?: string;
 };
 
+async function notify(userId: string | null | undefined, type: string, body: string, link: string) {
+  if (!userId) return;
+  try {
+    await supabase.from("notifications").insert({ user_id: userId, type, body, read: false, link });
+  } catch { /* notifications table may not exist yet */ }
+}
+
 export default function ChatPage() {
   const router = useRouter();
   const params = useParams();
@@ -46,6 +53,12 @@ export default function ChatPage() {
   const [theirItems, setTheirItems] = useState<ClothingItem[]>([]);
   const [selectedMine, setSelectedMine] = useState<ClothingItem | null>(null);
   const [selectedTheirs, setSelectedTheirs] = useState<ClothingItem | null>(null);
+
+  // Report
+  const [showReportSheet, setShowReportSheet] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [reportConfirming, setReportConfirming] = useState(false);
+  const [submittingReport, setSubmittingReport] = useState(false);
 
   // Addresses
   const [myAddress, setMyAddress] = useState<TradeAddress | null>(null);
@@ -194,6 +207,7 @@ export default function ChatPage() {
         proposed_at: new Date().toISOString(),
       }).eq("id", matchId);
       setMatch(prev => prev ? { ...prev, trade_status: "proposal_sent", proposal_sender_id: me } : null);
+      await notify(otherId, "proposal_received", "🔄 You received a trade proposal! Check your chat.", `/chat/${matchId}`);
     } catch { /* new columns may not exist yet */ }
     setShowProposal(false);
   }
@@ -204,6 +218,7 @@ export default function ChatPage() {
       await supabase.from("matches").update({ trade_status: "proposal_accepted", accepted_at: new Date().toISOString() }).eq("id", matchId);
       setMatch(prev => prev ? { ...prev, trade_status: "proposal_accepted" } : null);
       await supabase.from("messages").insert({ match_id: matchId, sender_id: me, body: "✅ Trade accepted! Ship your items to each other." });
+      await notify(match.proposal_sender_id, "proposal_accepted", "✅ Your trade proposal was accepted! Ship your item.", `/chat/${matchId}`);
       if (otherId) await fetchAddresses(me, otherId);
       setAddrExpanded(true);
     } catch (e) { console.error("accept:", e); }
@@ -215,6 +230,7 @@ export default function ChatPage() {
       await supabase.from("matches").update({ trade_status: "matched", proposal_sender_id: null }).eq("id", matchId);
       setMatch(prev => prev ? { ...prev, trade_status: "matched", proposal_sender_id: undefined } : null);
       await supabase.from("messages").insert({ match_id: matchId, sender_id: me, body: "❌ Proposal declined." });
+      await notify(match.proposal_sender_id, "proposal_declined", "❌ Your trade proposal was declined.", `/chat/${matchId}`);
     } catch (e) { console.error("decline:", e); }
   }
 
@@ -229,6 +245,7 @@ export default function ChatPage() {
         updated.trade_status = "both_shipped";
         await supabase.from("messages").insert({ match_id: matchId, sender_id: me, body: "📦 Both items shipped! Confirm receipt when yours arrives." });
       }
+      await notify(otherId, "partner_shipped", "📦 Your trade partner shipped their item! Now ship yours.", `/chat/${matchId}`);
       setMatch(updated);
     } catch (e) { console.error("shipped:", e); }
   }
@@ -266,14 +283,40 @@ export default function ChatPage() {
       }
       await supabase.from("matches").update({ status: "completed", trade_status: "completed", completed_at: new Date().toISOString() }).eq("id", m.id);
       setMatch({ ...m, status: "completed", trade_status: "completed" });
+      await notify(m.user_a_uid, "trade_completed", "🏆 Trade completed! Don't forget to rate your partner.", `/chat/${m.id}`);
+      await notify(m.user_b_uid, "trade_completed", "🏆 Trade completed! Don't forget to rate your partner.", `/chat/${m.id}`);
       if (!rated) setShowRating(true);
     } catch (e) { console.error("completeTrade:", e); }
+  }
+
+  async function submitReport() {
+    if (!reportReason || !me || !match) return;
+    setSubmittingReport(true);
+    try {
+      await supabase.from("matches").update({ trade_status: "disputed" }).eq("id", matchId);
+      setMatch(prev => prev ? { ...prev, trade_status: "disputed" } : null);
+      await supabase.from("messages").insert({
+        match_id: matchId, sender_id: me,
+        body: `⚠️ A problem has been reported: ${reportReason}. The TRADE team will review this trade.`,
+      });
+      await notify(otherId, "dispute", `⚠️ A problem was reported on your trade. The TRADE team will review it.`, `/chat/${matchId}`);
+      await fetch("/api/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matchId, reporterName: otherName ? `against ${otherName}` : "unknown", reason: reportReason, chatLink: `/chat/${matchId}` }),
+      });
+    } catch (e) { console.error("report:", e); }
+    setSubmittingReport(false);
+    setShowReportSheet(false);
+    setReportReason("");
+    setReportConfirming(false);
   }
 
   async function submitRating(stars: number) {
     if (!me || !otherId) return;
     try {
       await supabase.from("ratings").insert({ match_id: matchId, rater_id: me, rated_id: otherId, stars });
+      await notify(otherId, "rating", `⭐ You received a ${stars}-star rating!`, `/chat/${matchId}`);
     } catch { /* ok */ }
     setRated(true);
     setShowRating(false);
@@ -397,7 +440,7 @@ export default function ChatPage() {
         {messages.map((m) => {
           const mine = m.sender_id === me;
           const isProposal = m.body.startsWith("🔄 Trade proposal:");
-          const isSystem = m.body.startsWith("✅ Trade accepted") || m.body.startsWith("❌ Proposal") || m.body.startsWith("📦 Both items");
+          const isSystem = m.body.startsWith("✅ Trade accepted") || m.body.startsWith("❌ Proposal") || m.body.startsWith("📦 Both items") || m.body.startsWith("⚠️ A problem");
 
           if (isSystem) {
             return (
@@ -485,6 +528,18 @@ export default function ChatPage() {
         <div style={{ flexShrink: 0, padding: "6px 14px 0" }}>
           <button onClick={openProposal} style={{ width: "100%", height: 42, borderRadius: 21, border: "1.5px solid #3c2f22", background: "transparent", color: "#3c2f22", fontWeight: 700, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}>
             🔄 Propose a trade
+          </button>
+        </div>
+      )}
+
+      {/* Report a problem — small text button, visible during active trades */}
+      {!isDirectChat && (tradeStatus === "proposal_accepted" || tradeStatus === "both_shipped" || tradeStatus === "completed") && (
+        <div style={{ flexShrink: 0, textAlign: "center", paddingBottom: 2 }}>
+          <button
+            onClick={() => { setReportReason(""); setReportConfirming(false); setShowReportSheet(true); }}
+            style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "rgba(45,26,10,0.4)", padding: "4px 12px" }}
+          >
+            ⚠️ Report a problem
           </button>
         </div>
       )}
@@ -591,6 +646,62 @@ export default function ChatPage() {
             <button onClick={saveAddress} disabled={savingAddr} style={{ width: "100%", height: 52, borderRadius: 26, border: "none", background: "#FFC543", color: "#2D1A0A", fontWeight: 800, fontSize: 16, cursor: savingAddr ? "not-allowed" : "pointer", marginTop: 8, opacity: savingAddr ? 0.7 : 1 }}>
               {savingAddr ? "Saving…" : "Save address"}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Report a problem sheet */}
+      {showReportSheet && (
+        <div onClick={() => { setShowReportSheet(false); setReportConfirming(false); setReportReason(""); }} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(20,12,4,0.6)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, background: "#F9F4E8", borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: "22px 20px calc(32px + env(safe-area-inset-bottom, 0px))" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+              <p style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "#3c2f22" }}>Report a problem</p>
+              <button onClick={() => { setShowReportSheet(false); setReportConfirming(false); setReportReason(""); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 24, color: "#3c2f22", lineHeight: 1 }}>×</button>
+            </div>
+
+            {!reportConfirming ? (
+              <>
+                <p style={{ margin: "0 0 14px", fontSize: 13, color: "#9b8f7a" }}>What went wrong?</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {["📦 Wrong item sent", "❌ Item not as described", "🚫 Item never arrived", "💔 Item damaged"].map(reason => (
+                    <button
+                      key={reason}
+                      onClick={() => setReportReason(reason)}
+                      style={{ width: "100%", textAlign: "left", padding: "14px 16px", borderRadius: 16, border: reportReason === reason ? "2px solid #3c2f22" : "1.5px solid #ddd5c6", background: reportReason === reason ? "#f0e8d9" : "#fff", fontWeight: reportReason === reason ? 700 : 500, fontSize: 15, color: "#3c2f22", cursor: "pointer" }}
+                    >
+                      {reason}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => reportReason && setReportConfirming(true)}
+                  disabled={!reportReason}
+                  style={{ width: "100%", height: 52, marginTop: 16, borderRadius: 26, border: "none", background: reportReason ? "#3c2f22" : "#e6ddca", color: reportReason ? "#FFC543" : "#b3a896", fontWeight: 800, fontSize: 16, cursor: reportReason ? "pointer" : "not-allowed" }}
+                >
+                  Continue
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{ background: "#fff3e0", borderRadius: 18, padding: "14px 16px", marginBottom: 16, border: "1.5px solid #FFC543" }}>
+                  <p style={{ margin: "0 0 4px", fontSize: 13, color: "#8a6d2a", fontWeight: 700 }}>Reason: {reportReason}</p>
+                  <p style={{ margin: 0, fontSize: 13, color: "#7a6f5d", lineHeight: 1.5 }}>
+                    This will mark the trade as <strong>disputed</strong> and notify the TRADE team. Both parties will be notified.
+                  </p>
+                </div>
+                <p style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700, color: "#3c2f22", textAlign: "center" }}>
+                  Are you sure you want to report this trade?
+                </p>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button onClick={() => setReportConfirming(false)} style={{ flex: 1, height: 50, borderRadius: 25, border: "1.5px solid #3c2f22", background: "transparent", color: "#3c2f22", fontWeight: 700, fontSize: 15, cursor: "pointer" }}>
+                    Cancel
+                  </button>
+                  <button onClick={submitReport} disabled={submittingReport} style={{ flex: 1, height: 50, borderRadius: 25, border: "none", background: "#e03c3c", color: "#fff", fontWeight: 800, fontSize: 15, cursor: submittingReport ? "not-allowed" : "pointer", opacity: submittingReport ? 0.7 : 1 }}>
+                    {submittingReport ? "Sending…" : "Confirm report"}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

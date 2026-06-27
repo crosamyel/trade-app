@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 
 /* Cluster haut-droit standard du header — données réelles, identiques partout :
    - pill coins  (solde réel)  → /wallet
-   - cloche (nb réel de notifs) → /notifications  */
+   - cloche (nb de notifs non lues) → /notifications  */
 export function HeaderActions() {
   const router = useRouter();
   const [coins, setCoins] = useState<number | null>(null);
@@ -15,34 +15,62 @@ export function HeaderActions() {
 
   useEffect(() => {
     let cancelled = false;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
     async function load() {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user || cancelled) return;
 
-      // Solde réel
+      // Coins balance
       try {
         const { data: prof } = await supabase.from("profiles").select("coins_balance").eq("id", user.id).single();
         if (!cancelled && typeof prof?.coins_balance === "number") setCoins(prof.coins_balance);
       } catch { /* profiles optional */ }
 
-      // Nombre réel de notifs = matches + likes reçus
-      let count = 0;
+      // Unread notification count — uses notifications table, falls back to matches+likes
+      async function fetchUnread() {
+        let count = 0;
+        try {
+          const { count: nc } = await supabase
+            .from("notifications")
+            .select("*", { count: "exact", head: true })
+            .eq("user_id", user!.id)
+            .eq("read", false);
+          count = nc ?? 0;
+        } catch {
+          // Table not created yet — fall back to matches + likes count
+          try {
+            const { count: mc } = await supabase.from("matches")
+              .select("*", { count: "exact", head: true })
+              .or(`user_a_uid.eq.${user!.id},user_b_uid.eq.${user!.id}`);
+            count += mc ?? 0;
+          } catch { /* ok */ }
+          try {
+            const { count: lc } = await supabase.from("likes")
+              .select("*, clothing!inner(user_id)", { count: "exact", head: true })
+              .eq("clothing.user_id", user!.id);
+            count += lc ?? 0;
+          } catch { /* ok */ }
+        }
+        if (!cancelled) setNotifCount(count);
+      }
+
+      await fetchUnread();
+
+      // Realtime: refresh count on any change to user's notifications
       try {
-        const { count: mc } = await supabase.from("matches")
-          .select("*", { count: "exact", head: true })
-          .or(`user_a_uid.eq.${user.id},user_b_uid.eq.${user.id}`);
-        count += mc ?? 0;
-      } catch { /* matches optional */ }
-      try {
-        const { count: lc } = await supabase.from("likes")
-          .select("*, clothing!inner(user_id)", { count: "exact", head: true })
-          .eq("clothing.user_id", user.id);
-        count += lc ?? 0;
-      } catch { /* likes optional */ }
-      if (!cancelled) setNotifCount(count);
+        channel = supabase.channel(`header_notifs:${user.id}`)
+          .on("postgres_changes", { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` }, () => {
+            fetchUnread();
+          }).subscribe();
+      } catch { /* realtime optional */ }
     }
+
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      if (channel) supabase.removeChannel(channel);
+    };
   }, []);
 
   return (
@@ -71,7 +99,7 @@ export function HeaderActions() {
         </svg>
         {notifCount > 0 && (
           <span style={{ position: "absolute", top: -2, right: -2, minWidth: 15, height: 15, borderRadius: 8, background: "#e03c3c", color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>
-            {notifCount}
+            {notifCount > 99 ? "99+" : notifCount}
           </span>
         )}
       </button>

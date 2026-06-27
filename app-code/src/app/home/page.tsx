@@ -24,6 +24,22 @@ type Clothing = {
 
 type MatchInfo = { myPhoto: string; theirPhoto: string; theirUserId: string };
 
+type Ad = {
+  id: string;
+  advertiser_name?: string;
+  image_url?: string;
+  link_url?: string;
+  cta_text?: string;
+  isAd: true;
+};
+
+async function notifyUser(userId: string | null | undefined, type: string, body: string, link: string) {
+  if (!userId) return;
+  try {
+    await supabase.from("notifications").insert({ user_id: userId, type, body, read: false, link });
+  } catch { /* notifications table may not exist yet */ }
+}
+
 export default function HomePage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<{ id: string } | null>(null);
@@ -33,6 +49,7 @@ export default function HomePage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [activeAds, setActiveAds] = useState<Ad[]>([]);
 
   // Feuille "choisir mon vêtement à proposer" (Mode B — troc)
   const [proposingFor, setProposingFor] = useState<Clothing | null>(null);
@@ -112,6 +129,12 @@ export default function HomePage() {
         .eq("status", "active");
       setMyItems((mine as Clothing[]) ?? []);
 
+      // Load active ads (inactive by default, no ads shown until activated)
+      try {
+        const { data: ads } = await supabase.from("ads").select("*").eq("active", true).limit(10);
+        if (ads && ads.length > 0) setActiveAds((ads as Ad[]).map(a => ({ ...a, isAd: true as const })));
+      } catch { /* ads table may not exist yet */ }
+
       setLoading(false);
     }
     init();
@@ -123,7 +146,15 @@ export default function HomePage() {
     router.refresh();
   }
 
-  const current = stack[currentIndex];
+  function getCard(idx: number): Clothing | Ad | null {
+    if (idx > 0 && idx % 10 === 0 && activeAds.length > 0) {
+      return activeAds[Math.floor(idx / 10) % activeAds.length];
+    }
+    return stack[idx] ?? null;
+  }
+
+  const current = getCard(currentIndex);
+  const isCurrentAd = current !== null && "isAd" in current && (current as Ad).isAd === true;
 
   function toCard(item: Clothing): CardData {
     return {
@@ -176,6 +207,7 @@ export default function HomePage() {
           clothing_a_id: matchCheck[0].clothing_id,
           clothing_b_id: item.id,
         });
+        await notifyUser(item.user_id, "match", "🎉 New match! Someone loves your item — check your messages.", "/matches");
         setMatchData({
           myPhoto: myItem.image_url ?? "/card-photo-01.png",
           theirPhoto: item.image_url ?? "/card-photo-01.png",
@@ -192,13 +224,22 @@ export default function HomePage() {
   // Décision : skip = sortie gauche + suivant ; like = ouvre la feuille de proposition
   function decide(dir: "left" | "right") {
     if (exitDir || proposingFor || !current) return;
+    if (isCurrentAd) {
+      // Ad card: any swipe just advances (right swipe opens the link)
+      if (dir === "right" && (current as Ad).link_url) {
+        window.open((current as Ad).link_url!, "_blank", "noopener,noreferrer");
+      }
+      setExitDir(dir);
+      setTimeout(advance, 300);
+      return;
+    }
     if (dir === "left") {
       setExitDir("left");
       setTimeout(advance, 300);
     } else {
       // On remet la carte au centre et on ouvre la feuille "choisir mon vêtement"
       setDragX(0); dragXRef.current = 0;
-      setProposingFor(current);
+      setProposingFor(current as Clothing);
     }
   }
 
@@ -218,10 +259,15 @@ export default function HomePage() {
     const dy = dragYRef.current;
     dragYRef.current = 0; setDragY(0);
     const isVertical = Math.abs(dy) > Math.abs(dx);
-    // Swipe haut dominant → page de détail
+    // Swipe haut dominant → page de détail (ou lien publicitaire pour les ads)
     if (dy < -80 && isVertical && current) {
       setDragX(0); dragXRef.current = 0;
-      router.push(`/detail/${current.id}`);
+      if (isCurrentAd) {
+        const adLink = (current as Ad).link_url;
+        if (adLink) window.open(adLink, "_blank", "noopener,noreferrer");
+      } else {
+        router.push(`/detail/${current.id}`);
+      }
       return;
     }
     // Swipe bas dominant → article précédent
@@ -335,16 +381,21 @@ export default function HomePage() {
                 : (dragging ? "none" : "transform 0.25s ease"),
             }}
           >
-            <SwipeCard card={toCard(current)} height="100%" />
-
-            {/* Overlay LIKE (vert) */}
-            <div style={{ ...overlayBase, background: "rgba(93,143,60,0.45)", opacity: overlayLike }}>
-              <span style={overlayBadge("#5d8f3c", "-14deg")}>TRADE ✓</span>
-            </div>
-            {/* Overlay SKIP (rouge) */}
-            <div style={{ ...overlayBase, background: "rgba(217,64,64,0.45)", opacity: overlaySkip }}>
-              <span style={overlayBadge("#d94040", "14deg")}>SKIP ✗</span>
-            </div>
+            {isCurrentAd ? (
+              <AdCard ad={current as Ad} />
+            ) : (
+              <>
+                <SwipeCard card={toCard(current as Clothing)} height="100%" />
+                {/* Overlay LIKE (vert) */}
+                <div style={{ ...overlayBase, background: "rgba(93,143,60,0.45)", opacity: overlayLike }}>
+                  <span style={overlayBadge("#5d8f3c", "-14deg")}>TRADE ✓</span>
+                </div>
+                {/* Overlay SKIP (rouge) */}
+                <div style={{ ...overlayBase, background: "rgba(217,64,64,0.45)", opacity: overlaySkip }}>
+                  <span style={overlayBadge("#d94040", "14deg")}>SKIP ✗</span>
+                </div>
+              </>
+            )}
           </div>
         ) : (
           <div style={{ width: "100%", height: "100%", borderRadius: 30, background: "#ede7d9", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -377,11 +428,11 @@ export default function HomePage() {
 
         <button
           onClick={async () => {
-            if (!current || !currentUser) return;
+            if (!current || !currentUser || isCurrentAd) return;
             if (!saved) {
               setSaved(true);
               await supabase.from("likes").upsert(
-                { user_id: currentUser.id, clothing_id: current.id },
+                { user_id: currentUser.id, clothing_id: (current as Clothing).id },
                 { onConflict: "user_id,clothing_id" }
               );
             } else {
@@ -389,10 +440,10 @@ export default function HomePage() {
               await supabase.from("likes")
                 .delete()
                 .eq("user_id", currentUser.id)
-                .eq("clothing_id", current.id);
+                .eq("clothing_id", (current as Clothing).id);
             }
           }}
-          style={{ background: "transparent", border: "none", cursor: "pointer", padding: 2 }}
+          style={{ background: "transparent", border: "none", cursor: isCurrentAd ? "default" : "pointer", padding: 2, opacity: isCurrentAd ? 0 : 1, pointerEvents: isCurrentAd ? "none" : "auto" }}
         >
           <StarIcon filled={saved} />
         </button>
@@ -402,7 +453,7 @@ export default function HomePage() {
           disabled={!current}
           style={{ display: "flex", alignItems: "center", gap: 7, background: "transparent", border: "none", cursor: current ? "pointer" : "default", padding: 2, opacity: current ? 1 : 0.4 }}
         >
-          <span style={{ fontSize: 16, fontWeight: 700, color: "#5d8f3c" }}>Trade</span>
+          <span style={{ fontSize: 16, fontWeight: 700, color: isCurrentAd ? "#9b8f7a" : "#5d8f3c" }}>{isCurrentAd ? "Visit" : "Trade"}</span>
           <ArrowRight />
         </button>
       </div>
@@ -429,6 +480,40 @@ export default function HomePage() {
         />
       )}
 
+    </div>
+  );
+}
+
+/* ===== Ad Card — affiché à chaque position multiple de 10 dans le feed ===== */
+function AdCard({ ad }: { ad: Ad }) {
+  return (
+    <div style={{ width: "100%", height: "100%", borderRadius: 30, overflow: "hidden", position: "relative", background: "#ece6d8" }}>
+      {ad.image_url && (
+        <img src={ad.image_url} alt={ad.advertiser_name ?? "Ad"} style={{ width: "100%", height: "100%", objectFit: "cover" }} draggable={false} />
+      )}
+      {/* Gradient overlay */}
+      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, transparent 45%, rgba(0,0,0,0.65) 100%)" }} />
+      {/* Sponsored badge */}
+      <div style={{ position: "absolute", top: 14, right: 14, background: "#FFC543", borderRadius: 20, padding: "4px 10px" }}>
+        <span style={{ fontSize: 11, fontWeight: 800, color: "#2D1A0A", letterSpacing: 0.3 }}>Sponsored</span>
+      </div>
+      {/* Bottom info */}
+      <div style={{ position: "absolute", bottom: 18, left: 18, right: 18 }}>
+        {ad.advertiser_name && (
+          <p style={{ color: "#fff", fontWeight: 800, fontSize: 20, margin: "0 0 10px", textShadow: "0 1px 4px rgba(0,0,0,0.4)" }}>{ad.advertiser_name}</p>
+        )}
+        {ad.link_url && (
+          <a
+            href={ad.link_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            style={{ display: "inline-block", background: "#FFC543", color: "#2D1A0A", fontWeight: 800, fontSize: 14, padding: "9px 20px", borderRadius: 24, textDecoration: "none" }}
+          >
+            {ad.cta_text ?? "Discover"} →
+          </a>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,8 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { HeaderActions } from "@/components/HeaderActions";
 
@@ -23,41 +23,99 @@ const PACKS = [
 ];
 
 export default function WalletPage() {
+  return (
+    <Suspense>
+      <WalletContent />
+    </Suspense>
+  );
+}
+
+function WalletContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [balance, setBalance] = useState<number | null>(null);
   const [reserved, setReserved] = useState(0);
   const [txs, setTxs] = useState<Tx[]>([]);
   const [toast, setToast] = useState("");
+  const [buying, setBuying] = useState<number | null>(null);
 
-  useEffect(() => {
-    async function init() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { router.replace("/login"); return; }
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(""), 3200);
+  }
 
-      // Solde coins réel depuis Supabase
-      const { data: prof, error: profErr } = await supabase
-        .from("profiles").select("coins_balance, reserved_coins").eq("id", user.id).single();
-      if (profErr) console.error("wallet/profiles:", profErr.message);
-      if (typeof prof?.coins_balance === "number") setBalance(prof.coins_balance);
-      else setBalance(0);
-      if (typeof prof?.reserved_coins === "number") setReserved(prof.reserved_coins);
+  const loadWallet = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { router.replace("/login"); return; }
 
-      // Vraies transactions
-      const { data: transactions } = await supabase
-        .from("transactions")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-      setTxs((transactions as Tx[]) ?? []);
-    }
-    init();
+    const { data: prof, error: profErr } = await supabase
+      .from("profiles").select("coins_balance, reserved_coins").eq("id", user.id).single();
+    if (profErr) console.error("wallet/profiles:", profErr.message);
+    if (typeof prof?.coins_balance === "number") setBalance(prof.coins_balance);
+    else setBalance(0);
+    if (typeof prof?.reserved_coins === "number") setReserved(prof.reserved_coins);
+
+    const { data: transactions } = await supabase
+      .from("transactions").select("*").eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+    setTxs((transactions as Tx[]) ?? []);
   }, [router]);
+
+  useEffect(() => { loadWallet(); }, [loadWallet]);
+
+  // Handle Stripe redirect back to /wallet?success=20 or ?cancelled=1
+  useEffect(() => {
+    const success = searchParams.get("success");
+    const cancelled = searchParams.get("cancelled");
+    if (success) {
+      showToast(`🎉 ${success} coins added to your wallet!`);
+      // Refresh balance after successful payment
+      loadWallet();
+      // Clean up URL
+      router.replace("/wallet");
+    } else if (cancelled) {
+      showToast("Payment cancelled. No coins were charged.");
+      router.replace("/wallet");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function buyPack(coins: number) {
+    if (buying) return;
+    setBuying(coins);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { router.push("/login"); return; }
+
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ pack: String(coins) }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.url) {
+        showToast("Something went wrong. Please try again.");
+        return;
+      }
+
+      window.location.href = data.url;
+    } catch {
+      showToast("Connection error. Please try again.");
+    } finally {
+      setBuying(null);
+    }
+  }
 
   const safeBalance = balance ?? 0;
   const available = safeBalance - reserved;
 
   return (
     <div style={{ position: "relative", width: "100%", minHeight: "100dvh", background: "#F9F4E8", fontFamily: FONT }}>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       {/* Header unifié */}
       <div style={{
         position: "relative", background: "#3c2f22",
@@ -111,18 +169,43 @@ export default function WalletPage() {
         {/* Buy coins */}
         <h2 style={{ fontSize: 20, fontWeight: 800, color: "#2D1A0A", margin: "26px 0 12px" }}>Buy coins</h2>
         <div style={{ display: "flex", gap: 10 }}>
-          {PACKS.map((p) => (
-            <button key={p.coins} onClick={() => { setToast("Coming soon — payments will be available shortly 🪙"); setTimeout(() => setToast(""), 2800); }} style={{ position: "relative", flex: 1, borderRadius: 16, border: "1.5px solid #E8E4DC", background: p.popular ? "#FFF8E7" : "#F9F4E8", padding: "18px 6px 14px", textAlign: "center", boxShadow: "0 4px 12px rgba(0,0,0,0.08)", cursor: "pointer" }}>
-              {p.popular && (
-                <span style={{ position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)", whiteSpace: "nowrap", fontSize: 10, fontWeight: 700, color: "#8a6d2a", background: "#FFE9A8", borderRadius: 12, padding: "2px 8px" }}>⭐ Most popular</span>
-              )}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
-                <span style={{ fontSize: 22, fontWeight: 800, fontStyle: "italic", color: "#FFC543" }}>{p.coins}</span>
-                <span style={{ position: "relative", display: "inline-block", width: 16, height: 16 }}><Image src="/coin.png" alt="" fill style={{ objectFit: "contain" }} /></span>
-              </div>
-              <div style={{ fontSize: 13, color: "#D97A3A", marginTop: 6, fontWeight: 600 }}>{p.price}</div>
-            </button>
-          ))}
+          {PACKS.map((p) => {
+            const isLoading = buying === p.coins;
+            return (
+              <button
+                key={p.coins}
+                onClick={() => buyPack(p.coins)}
+                disabled={!!buying}
+                style={{
+                  position: "relative", flex: 1, borderRadius: 16,
+                  border: p.popular ? "2px solid #FFC543" : "1.5px solid #E8E4DC",
+                  background: p.popular ? "#FFF8E7" : "#F9F4E8",
+                  padding: "18px 6px 14px", textAlign: "center",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                  cursor: buying ? "wait" : "pointer",
+                  opacity: buying && !isLoading ? 0.6 : 1,
+                  transition: "opacity 0.2s",
+                }}
+              >
+                {p.popular && (
+                  <span style={{ position: "absolute", top: -10, left: "50%", transform: "translateX(-50%)", whiteSpace: "nowrap", fontSize: 10, fontWeight: 700, color: "#8a6d2a", background: "#FFE9A8", borderRadius: 12, padding: "2px 8px" }}>⭐ Most popular</span>
+                )}
+                {isLoading ? (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 44 }}>
+                    <div style={{ width: 18, height: 18, border: "2.5px solid #FFC543", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                      <span style={{ fontSize: 22, fontWeight: 800, fontStyle: "italic", color: "#FFC543" }}>{p.coins}</span>
+                      <span style={{ position: "relative", display: "inline-block", width: 16, height: 16 }}><Image src="/coin.png" alt="" fill style={{ objectFit: "contain" }} /></span>
+                    </div>
+                    <div style={{ fontSize: 13, color: "#D97A3A", marginTop: 6, fontWeight: 600 }}>{p.price}</div>
+                  </>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Recent transactions */}

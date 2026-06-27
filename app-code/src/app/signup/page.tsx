@@ -171,9 +171,9 @@ export default function SignupPage() {
             style={{ marginRight: 10, accentColor: "#ffc543", width: 20, height: 20, flexShrink: 0 }}
           />
           I accept the{" "}
-          <a href="#" style={{ color: "#3c2f22", fontWeight: 700, textDecoration: "underline" }}>Terms</a>
+          <a href="/terms" target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ color: "#3c2f22", fontWeight: 700, textDecoration: "underline" }}>Terms</a>
           {" "}and{" "}
-          <a href="#" style={{ color: "#3c2f22", fontWeight: 700, textDecoration: "underline" }}>Privacy Policy</a>
+          <a href="/privacy" target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ color: "#3c2f22", fontWeight: 700, textDecoration: "underline" }}>Privacy Policy</a>
         </label>
 
         {/* Séparateur */}
