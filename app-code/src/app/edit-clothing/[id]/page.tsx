@@ -223,46 +223,64 @@ export default function EditClothingPage() {
           />
         </div>
 
-        {/* Coins value */}
-        <div style={{ marginBottom: 18 }}>
-          <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "#7a6f5d", marginBottom: 6 }}>
-            🪙 Coins value
-            <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: "#b3a896" }}>— proposé par TRADE, ajustable</span>
-          </label>
-          <div style={{ background: "#f0e2b8", borderRadius: 18, padding: "12px 16px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <button
-                onClick={() => setCoinsValue(v => Math.max(5, v - 5))}
-                style={{ width: 36, height: 36, borderRadius: "50%", border: "none", background: "#3c2f22", color: "#FFC543", fontSize: 22, fontWeight: 800, cursor: "pointer", lineHeight: 1, flexShrink: 0 }}
-              >−</button>
-              <input
-                type="number" min={5} max={500}
-                value={coinsValue}
-                onChange={(e) => setCoinsValue(Math.min(500, Math.max(5, Number(e.target.value) || 5)))}
-                style={{ flex: 1, height: 40, background: "#fff", border: "1.5px solid #d4b870", borderRadius: 12, textAlign: "center", fontSize: 20, fontWeight: 800, color: "#8a6d2a", outline: "none", fontFamily: FONT }}
-              />
-              <button
-                onClick={() => setCoinsValue(v => Math.min(500, v + 5))}
-                style={{ width: 36, height: 36, borderRadius: "50%", border: "none", background: "#3c2f22", color: "#FFC543", fontSize: 22, fontWeight: 800, cursor: "pointer", lineHeight: 1, flexShrink: 0 }}
-              >+</button>
-              <span style={{ fontSize: 22, flexShrink: 0 }}>🪙</span>
+        {/* Coins value — ±15% autour de la suggestion TRADE */}
+        {(() => {
+          const minCoins = Math.max(5, Math.round(coinsSuggested * 0.85));
+          const maxCoins = Math.min(500, Math.round(coinsSuggested * 1.15));
+          const clamp = (v: number) => Math.min(maxCoins, Math.max(minCoins, v));
+          const pct = coinsSuggested > 0
+            ? Math.round(((coinsValue - coinsSuggested) / coinsSuggested) * 100)
+            : 0;
+          return (
+            <div style={{ marginBottom: 18 }}>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "#7a6f5d", marginBottom: 6 }}>
+                🪙 Coins value
+                <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: "#b3a896" }}>— TRADE suggestion ±15%</span>
+              </label>
+              <div style={{ background: "#f0e2b8", borderRadius: 18, padding: "12px 16px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <button
+                    onClick={() => setCoinsValue(v => clamp(v - 1))}
+                    disabled={coinsValue <= minCoins}
+                    style={{ width: 36, height: 36, borderRadius: "50%", border: "none", background: coinsValue <= minCoins ? "#c9b98a" : "#3c2f22", color: "#FFC543", fontSize: 22, fontWeight: 800, cursor: coinsValue <= minCoins ? "not-allowed" : "pointer", lineHeight: 1, flexShrink: 0 }}
+                  >−</button>
+                  <input
+                    type="number"
+                    min={minCoins} max={maxCoins}
+                    value={coinsValue}
+                    onChange={(e) => setCoinsValue(clamp(Number(e.target.value) || minCoins))}
+                    style={{ flex: 1, height: 40, background: "#fff", border: "1.5px solid #d4b870", borderRadius: 12, textAlign: "center", fontSize: 20, fontWeight: 800, color: "#8a6d2a", outline: "none", fontFamily: FONT }}
+                  />
+                  <button
+                    onClick={() => setCoinsValue(v => clamp(v + 1))}
+                    disabled={coinsValue >= maxCoins}
+                    style={{ width: 36, height: 36, borderRadius: "50%", border: "none", background: coinsValue >= maxCoins ? "#c9b98a" : "#3c2f22", color: "#FFC543", fontSize: 22, fontWeight: 800, cursor: coinsValue >= maxCoins ? "not-allowed" : "pointer", lineHeight: 1, flexShrink: 0 }}
+                  >+</button>
+                  <span style={{ fontSize: 22, flexShrink: 0 }}>🪙</span>
+                </div>
+                {/* Barre de range */}
+                <input
+                  type="range" min={minCoins} max={maxCoins}
+                  value={coinsValue}
+                  onChange={(e) => setCoinsValue(Number(e.target.value))}
+                  style={{ width: "100%", marginTop: 10, accentColor: "#3c2f22" }}
+                />
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#9a7d3a", marginTop: 2 }}>
+                  <span>{minCoins} coins</span>
+                  <span style={{ fontWeight: 700 }}>
+                    {pct === 0 ? "TRADE suggestion" : pct > 0 ? `+${pct}%` : `${pct}%`}
+                  </span>
+                  <span>{maxCoins} coins</span>
+                </div>
+                <p style={{ margin: "6px 0 0", fontSize: 11, color: "#9a7d3a", lineHeight: 1.4 }}>
+                  💡 {brand && condition
+                    ? `${condition} ${brand} → ${coinsSuggested} coins suggested by TRADE`
+                    : "Value calculated by TRADE based on brand and condition"}
+                </p>
+              </div>
             </div>
-            {/* Explication du calcul */}
-            <p style={{ margin: "8px 0 0", fontSize: 11, color: "#9a7d3a", lineHeight: 1.4 }}>
-              💡 {brand && condition
-                ? `${style || "Item"} (base) × ${brand} × ${condition} = ${coinsSuggested} coins suggérés`
-                : "Valeur calculée par TRADE selon la marque, la catégorie et l'état"}
-            </p>
-            {coinsValue !== coinsSuggested && (
-              <button
-                onClick={() => setCoinsValue(coinsSuggested)}
-                style={{ marginTop: 4, fontSize: 11, color: "#8a6d2a", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", padding: 0 }}
-              >
-                ↩ Reset à la valeur suggérée ({coinsSuggested} coins)
-              </button>
-            )}
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Erreur / succès */}
         {error && <p style={{ fontSize: 13, color: "#e03c3c", textAlign: "center", marginBottom: 10 }}>{error}</p>}

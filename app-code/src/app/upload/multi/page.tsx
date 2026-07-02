@@ -537,45 +537,42 @@ export default function MultiUploadPage() {
               </div>
             </div>
 
-            {/* Coins banner */}
+            {/* Coins banner — ±15% autour de la suggestion TRADE */}
             {(() => {
               const suggested = cur.coins_suggested ?? calculateCoins(cur.condition, cur.brand, cur.category);
+              const minC = Math.max(5, Math.round(suggested * 0.85));
+              const maxC = Math.min(500, Math.round(suggested * 1.15));
               const coins = cur.coins_value ?? suggested;
-              const isModified = cur.coins_value !== null && cur.coins_value !== cur.coins_suggested;
+              const clamp = (v: number) => Math.min(maxC, Math.max(minC, v));
+              const pct = suggested > 0 ? Math.round(((coins - suggested) / suggested) * 100) : 0;
               return (
                 <div style={{ marginBottom: 14, background: "#f0e2b8", borderRadius: 16, padding: "12px 16px" }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: "#8a6d2a" }}>
-                      🪙 <strong style={{ fontSize: 17 }}>{coins}</strong> coins
-                      {isModified && (
-                        <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 6, color: "#b8860b" }}>
-                          (suggested: {suggested})
-                        </span>
-                      )}
-                    </span>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      {isModified && (
-                        <button
-                          onClick={() => patchGroup(cur.id, { coins_value: suggested })}
-                          style={{
-                            fontSize: 11, color: "#8a6d2a", background: "none", border: "none",
-                            cursor: "pointer", textDecoration: "underline", padding: 0,
-                          }}
-                        >Reset</button>
-                      )}
-                      <input
-                        type="number"
-                        min={1} max={500}
-                        value={coins}
-                        onChange={(e) => patchGroup(cur.id, { coins_value: Number(e.target.value) })}
-                        style={{
-                          width: 64, height: 34, borderRadius: 17, border: "1.5px solid #d4b870",
-                          background: "#fff8e8", textAlign: "center", fontSize: 14, fontWeight: 700,
-                          color: "#8a6d2a", outline: "none",
-                          fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
-                        }}
-                      />
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <button
+                      onClick={() => patchGroup(cur.id, { coins_value: clamp(coins - 1) })}
+                      disabled={coins <= minC}
+                      style={{ width: 30, height: 30, borderRadius: "50%", border: "none", background: coins <= minC ? "#c9b98a" : "#3c2f22", color: "#FFC543", fontSize: 18, fontWeight: 800, cursor: coins <= minC ? "not-allowed" : "pointer", lineHeight: 1, flexShrink: 0 }}
+                    >−</button>
+                    <div style={{ flex: 1, textAlign: "center" }}>
+                      <span style={{ fontSize: 20, fontWeight: 800, color: "#8a6d2a" }}>{coins}</span>
+                      <span style={{ fontSize: 12, color: "#9a7d3a", marginLeft: 4 }}>🪙</span>
                     </div>
+                    <button
+                      onClick={() => patchGroup(cur.id, { coins_value: clamp(coins + 1) })}
+                      disabled={coins >= maxC}
+                      style={{ width: 30, height: 30, borderRadius: "50%", border: "none", background: coins >= maxC ? "#c9b98a" : "#3c2f22", color: "#FFC543", fontSize: 18, fontWeight: 800, cursor: coins >= maxC ? "not-allowed" : "pointer", lineHeight: 1, flexShrink: 0 }}
+                    >+</button>
+                  </div>
+                  <input
+                    type="range" min={minC} max={maxC}
+                    value={coins}
+                    onChange={(e) => patchGroup(cur.id, { coins_value: Number(e.target.value) })}
+                    style={{ width: "100%", marginTop: 8, accentColor: "#3c2f22" }}
+                  />
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#9a7d3a", marginTop: 2 }}>
+                    <span>{minC}</span>
+                    <span style={{ fontWeight: 700 }}>{pct === 0 ? "TRADE suggestion" : pct > 0 ? `+${pct}%` : `${pct}%`}</span>
+                    <span>{maxC}</span>
                   </div>
                   {cur.coins_reason && (
                     <p style={{ margin: "6px 0 0", fontSize: 11, color: "#9a7d3a", lineHeight: 1.4 }}>
