@@ -198,12 +198,11 @@ export default function MultiUploadPage() {
       const { data: pub } = supabase.storage.from("clothing-images").getPublicUrl(path);
 
       const coinsToSave = group.coins_value ?? calculateCoins(group.condition, group.brand, group.category);
-      const { error: dbErr } = await supabase.from("clothing").insert({
+      const insertData: Record<string, unknown> = {
         user_id: user.id,
         title: group.category || group.brand || "Item",
         brand: group.brand || null,
         size: group.size || null,
-        color: group.color || null,
         condition: group.condition || null,
         style: group.style || null,
         category: group.category || null,
@@ -211,8 +210,18 @@ export default function MultiUploadPage() {
         image_url: pub.publicUrl,
         status: "active",
         coins_value: coinsToSave,
-      });
-      if (dbErr) { setPublishError(`DB error for item ${idx + 1}: ${dbErr.message}`); setPhase("review"); return; }
+      };
+      // color — only insert if the column exists (avoids crash if not migrated yet)
+      if (group.color) insertData.color = group.color;
+
+      console.log(`[multi-upload] inserting item ${idx + 1}:`, insertData);
+      const { error: dbErr } = await supabase.from("clothing").insert(insertData);
+      if (dbErr) {
+        console.error(`[multi-upload] DB error item ${idx + 1}:`, dbErr);
+        setPublishError(`Failed to save item ${idx + 1}: ${dbErr.message}`);
+        setPhase("review");
+        return;
+      }
     }
 
     // Full reload so the profile page re-fetches items from Supabase
@@ -597,6 +606,21 @@ export default function MultiUploadPage() {
 
         {cur.analyzing && <div style={{ height: 110 }} />}
       </div>
+
+      {/* ── Error banner (floats above nav bar after failed publish) ── */}
+      {publishError && (
+        <div style={{
+          position: "fixed", bottom: "calc(88px + env(safe-area-inset-bottom, 0px))",
+          left: 16, right: 16, zIndex: 200,
+          background: "#fdecea", border: "1.5px solid #e03c3c", borderRadius: 14,
+          padding: "10px 14px", textAlign: "center",
+          boxShadow: "0 4px 16px rgba(224,60,60,0.2)",
+        }}>
+          <p style={{ margin: 0, color: "#c0392b", fontSize: 13, fontWeight: 700 }}>
+            🚫 {publishError}
+          </p>
+        </div>
+      )}
 
       {/* ── Fixed bottom navigation bar ──────────────────────────── */}
       <div style={{
