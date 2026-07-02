@@ -22,6 +22,7 @@ type Analysis = {
   style: string;
   description: string;
   coins_value: number | null;
+  coins_reason: string | null;
   fake_warning: boolean;
   fake_reason: string | null;
 };
@@ -29,7 +30,7 @@ type Analysis = {
 const EMPTY_ANALYSIS: Analysis = {
   title: "", category: "", size: "", color: "", condition: "",
   brand: "", material: "", style: "", description: "",
-  coins_value: null, fake_warning: false, fake_reason: null,
+  coins_value: null, coins_reason: null, fake_warning: false, fake_reason: null,
 };
 
 /* Les 4 slots photo : front + back + label obligatoires, detail optionnel */
@@ -63,6 +64,7 @@ export default function UploadPage() {
       style:        data.style        ?? "",
       description:  data.description  ?? "",
       coins_value:  data.coins_value  ?? null,
+      coins_reason: data.coins_reason ?? null,
       fake_warning: data.fake_warning ?? false,
       fake_reason:  data.fake_reason  ?? null,
     });
@@ -671,14 +673,20 @@ function StepVerify({ photos, analysis, setAnalysis }: {
       </div>
 
       {/* Bandeau coins */}
-      <div style={{
-        marginTop: 14, background: "#f0e2b8", borderRadius: 16, height: 46,
-        display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-      }}>
-        <span style={{ fontSize: 15, fontWeight: 700, color: "#8a6d2a" }}>You will get {coinsValue} coins</span>
-        <div style={{ position: "relative", width: 20, height: 20 }}>
-          <Image src="/coin.png" alt="coin" fill style={{ objectFit: "contain" }} />
+      <div style={{ marginTop: 14, background: "#f0e2b8", borderRadius: 16, padding: "10px 16px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: "#8a6d2a" }}>
+            🪙 You will get <strong>{coinsValue}</strong> coins
+          </span>
+          <div style={{ position: "relative", width: 20, height: 20 }}>
+            <Image src="/coin.png" alt="coin" fill style={{ objectFit: "contain" }} />
+          </div>
         </div>
+        {analysis.coins_reason && (
+          <p style={{ margin: "5px 0 0", fontSize: 11, color: "#9a7d3a", textAlign: "center", lineHeight: 1.4 }}>
+            💡 {analysis.coins_reason}
+          </p>
+        )}
       </div>
 
       {error && (

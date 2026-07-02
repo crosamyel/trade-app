@@ -28,6 +28,8 @@ type PhotoGroup = {
   style: string;
   description: string;
   coins_value: number | null;
+  coins_suggested: number | null;   // valeur originale proposée par l'IA (pour le reset)
+  coins_reason: string | null;      // explication du calcul
   error: string;
 };
 
@@ -119,7 +121,7 @@ export default function MultiUploadPage() {
         analyzing: true, analyzed: false,
         category: "", brand: "", size: "", color: "",
         condition: "", style: "", description: "",
-        coins_value: null, error: "",
+        coins_value: null, coins_suggested: null, coins_reason: null, error: "",
       };
     });
 
@@ -158,6 +160,8 @@ export default function MultiUploadPage() {
           condition: data.condition ?? "", style: data.style ?? "",
           description: data.description ?? "",
           coins_value: typeof data.coins_value === "number" ? data.coins_value : null,
+          coins_suggested: typeof data.coins_value === "number" ? data.coins_value : null,
+          coins_reason: data.coins_reason ?? null,
         });
       } catch {
         patchGroup(i, { analyzing: false, analyzed: true, error: "Analysis failed — fill in manually." });
@@ -535,31 +539,49 @@ export default function MultiUploadPage() {
 
             {/* Coins banner */}
             {(() => {
-              const coins = cur.coins_value ?? calculateCoins(cur.condition, cur.brand, cur.category);
+              const suggested = cur.coins_suggested ?? calculateCoins(cur.condition, cur.brand, cur.category);
+              const coins = cur.coins_value ?? suggested;
+              const isModified = cur.coins_value !== null && cur.coins_value !== cur.coins_suggested;
               return (
-                <div style={{
-                  marginBottom: 14,
-                  background: "#f0e2b8", borderRadius: 16, padding: "12px 16px",
-                  display: "flex", alignItems: "center", justifyContent: "space-between",
-                }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: "#8a6d2a" }}>
-                    You&apos;ll get <strong style={{ fontSize: 17 }}>{coins}</strong> coins
-                  </span>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <input
-                      type="number"
-                      min={1} max={500}
-                      value={coins}
-                      onChange={(e) => patchGroup(cur.id, { coins_value: Number(e.target.value) })}
-                      style={{
-                        width: 64, height: 34, borderRadius: 17, border: "1.5px solid #d4b870",
-                        background: "#fff8e8", textAlign: "center", fontSize: 14, fontWeight: 700,
-                        color: "#8a6d2a", outline: "none",
-                        fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
-                      }}
-                    />
-                    <span style={{ fontSize: 18 }}>🪙</span>
+                <div style={{ marginBottom: 14, background: "#f0e2b8", borderRadius: 16, padding: "12px 16px" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: "#8a6d2a" }}>
+                      🪙 <strong style={{ fontSize: 17 }}>{coins}</strong> coins
+                      {isModified && (
+                        <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 6, color: "#b8860b" }}>
+                          (suggested: {suggested})
+                        </span>
+                      )}
+                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      {isModified && (
+                        <button
+                          onClick={() => patchGroup(cur.id, { coins_value: suggested })}
+                          style={{
+                            fontSize: 11, color: "#8a6d2a", background: "none", border: "none",
+                            cursor: "pointer", textDecoration: "underline", padding: 0,
+                          }}
+                        >Reset</button>
+                      )}
+                      <input
+                        type="number"
+                        min={1} max={500}
+                        value={coins}
+                        onChange={(e) => patchGroup(cur.id, { coins_value: Number(e.target.value) })}
+                        style={{
+                          width: 64, height: 34, borderRadius: 17, border: "1.5px solid #d4b870",
+                          background: "#fff8e8", textAlign: "center", fontSize: 14, fontWeight: 700,
+                          color: "#8a6d2a", outline: "none",
+                          fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
+                        }}
+                      />
+                    </div>
                   </div>
+                  {cur.coins_reason && (
+                    <p style={{ margin: "6px 0 0", fontSize: 11, color: "#9a7d3a", lineHeight: 1.4 }}>
+                      💡 {cur.coins_reason}
+                    </p>
+                  )}
                 </div>
               );
             })()}

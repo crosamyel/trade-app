@@ -46,6 +46,7 @@ export default function EditClothingPage() {
   const [style, setStyle] = useState("");
   const [description, setDescription] = useState("");
   const [coinsValue, setCoinsValue] = useState<number>(20);
+  const [coinsSuggested, setCoinsSuggested] = useState<number>(20);
 
   // Photos (URL existante ou nouveau dataUrl)
   const [frontPhoto, setFrontPhoto] = useState<string | null>(null);
@@ -80,7 +81,9 @@ export default function EditClothingPage() {
       setCondition(item.condition ?? "");
       setStyle(item.style ?? "");
       setDescription(item.description ?? "");
-      setCoinsValue(item.coins_value ?? calcCoins(item.condition ?? "", item.brand ?? "", item.title ?? ""));
+      const suggested = calcCoins(item.condition ?? "", item.brand ?? "", item.title ?? "");
+      setCoinsValue(item.coins_value ?? suggested);
+      setCoinsSuggested(suggested);
       setFrontPhoto(item.image_url ?? null);
       setBackPhoto(item.image_back_url ?? null);
       setLabelPhoto(item.image_label_url ?? null);
@@ -268,32 +271,42 @@ export default function EditClothingPage() {
         {/* Coins value */}
         <div style={{ marginBottom: 18 }}>
           <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "#7a6f5d", marginBottom: 6 }}>
-            Coins value
-            <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: "#b3a896" }}>— what this item is worth in trades</span>
+            🪙 Coins value
+            <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: "#b3a896" }}>— proposé par TRADE, ajustable</span>
           </label>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, background: "#f0e2b8", borderRadius: 18, padding: "12px 16px" }}>
-            <button
-              onClick={() => setCoinsValue(v => Math.max(5, v - 5))}
-              style={{ width: 36, height: 36, borderRadius: "50%", border: "none", background: "#3c2f22", color: "#FFC543", fontSize: 22, fontWeight: 800, cursor: "pointer", lineHeight: 1, flexShrink: 0 }}
-            >−</button>
-            <input
-              type="number" min={5} max={500}
-              value={coinsValue}
-              onChange={(e) => setCoinsValue(Math.min(500, Math.max(5, Number(e.target.value) || 5)))}
-              style={{ flex: 1, height: 40, background: "#fff", border: "1.5px solid #d4b870", borderRadius: 12, textAlign: "center", fontSize: 20, fontWeight: 800, color: "#8a6d2a", outline: "none", fontFamily: FONT }}
-            />
-            <button
-              onClick={() => setCoinsValue(v => Math.min(500, v + 5))}
-              style={{ width: 36, height: 36, borderRadius: "50%", border: "none", background: "#3c2f22", color: "#FFC543", fontSize: 22, fontWeight: 800, cursor: "pointer", lineHeight: 1, flexShrink: 0 }}
-            >+</button>
-            <span style={{ fontSize: 22, flexShrink: 0 }}>🪙</span>
+          <div style={{ background: "#f0e2b8", borderRadius: 18, padding: "12px 16px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <button
+                onClick={() => setCoinsValue(v => Math.max(5, v - 5))}
+                style={{ width: 36, height: 36, borderRadius: "50%", border: "none", background: "#3c2f22", color: "#FFC543", fontSize: 22, fontWeight: 800, cursor: "pointer", lineHeight: 1, flexShrink: 0 }}
+              >−</button>
+              <input
+                type="number" min={5} max={500}
+                value={coinsValue}
+                onChange={(e) => setCoinsValue(Math.min(500, Math.max(5, Number(e.target.value) || 5)))}
+                style={{ flex: 1, height: 40, background: "#fff", border: "1.5px solid #d4b870", borderRadius: 12, textAlign: "center", fontSize: 20, fontWeight: 800, color: "#8a6d2a", outline: "none", fontFamily: FONT }}
+              />
+              <button
+                onClick={() => setCoinsValue(v => Math.min(500, v + 5))}
+                style={{ width: 36, height: 36, borderRadius: "50%", border: "none", background: "#3c2f22", color: "#FFC543", fontSize: 22, fontWeight: 800, cursor: "pointer", lineHeight: 1, flexShrink: 0 }}
+              >+</button>
+              <span style={{ fontSize: 22, flexShrink: 0 }}>🪙</span>
+            </div>
+            {/* Explication du calcul */}
+            <p style={{ margin: "8px 0 0", fontSize: 11, color: "#9a7d3a", lineHeight: 1.4 }}>
+              💡 {brand && condition
+                ? `${category || "Item"} (base) × ${brand} × ${condition} = ${coinsSuggested} coins suggérés`
+                : "Valeur calculée par TRADE selon la marque, la catégorie et l'état"}
+            </p>
+            {coinsValue !== coinsSuggested && (
+              <button
+                onClick={() => setCoinsValue(coinsSuggested)}
+                style={{ marginTop: 4, fontSize: 11, color: "#8a6d2a", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", padding: 0 }}
+              >
+                ↩ Reset à la valeur suggérée ({coinsSuggested} coins)
+              </button>
+            )}
           </div>
-          <button
-            onClick={() => setCoinsValue(calcCoins(condition, brand, title))}
-            style={{ marginTop: 6, fontSize: 11, color: "#9b8f7a", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", padding: 0 }}
-          >
-            Recalculate from brand/condition
-          </button>
         </div>
 
         {/* Erreur / succès */}

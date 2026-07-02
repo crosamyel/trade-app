@@ -20,6 +20,7 @@ Voici le JSON attendu :
   "material": "[matière si visible ex: 100% Cotton, Polyester, Denim — sinon Unknown]",
   "description": "[description complète en 2-3 phrases : style général, détails visuels, comment le porter]",
   "coins_value": [nombre entier calculé selon les règles ci-dessous],
+  "coins_reason": "[explication courte du calcul, ex: 'Tops (base 20) × Nike popular ×1.8 × like new ×1.6 = 58 coins']",
   "fake_warning": true ou false,
   "fake_reason": "[raison précise si fake_warning est true, sinon null]"
 }
