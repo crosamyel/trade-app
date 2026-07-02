@@ -124,7 +124,7 @@ export default function FiltersPage() {
       </div>
 
       {/* Apply */}
-      <div style={{ flexShrink: 0, padding: "12px 20px 24px", borderTop: "1px solid rgba(45,26,10,0.08)" }}>
+      <div style={{ flexShrink: 0, padding: "12px 20px", paddingBottom: "calc(24px + env(safe-area-inset-bottom, 0px))", borderTop: "1px solid rgba(45,26,10,0.08)" }}>
         <button onClick={apply} style={{ width: "100%", height: 54, borderRadius: 27, border: "none", background: "#FFC543", color: "#2D1A0A", fontWeight: 800, fontSize: 17, cursor: "pointer", boxShadow: "0 6px 18px rgba(255,197,67,0.45)" }}>
           See results{total > 0 ? ` (${total})` : ""}
         </button>

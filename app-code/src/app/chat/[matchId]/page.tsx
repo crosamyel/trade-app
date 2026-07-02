@@ -264,9 +264,9 @@ export default function ChatPage() {
   async function completeTrade(m: Match) {
     try {
       if (m.clothing_a_id && m.clothing_b_id) {
-        const { data: ca } = await supabase.from("clothing").select("price_coins").eq("id", m.clothing_a_id).single();
-        const { data: cb } = await supabase.from("clothing").select("price_coins").eq("id", m.clothing_b_id).single();
-        const pa = ca?.price_coins ?? 0, pb = cb?.price_coins ?? 0;
+        const { data: ca } = await supabase.from("clothing").select("coins_value").eq("id", m.clothing_a_id).single();
+        const { data: cb } = await supabase.from("clothing").select("coins_value").eq("id", m.clothing_b_id).single();
+        const pa = ca?.coins_value ?? 0, pb = cb?.coins_value ?? 0;
         let winner: string | null = null, amount = 0;
         if (pa > pb) { winner = m.user_b_uid; amount = pa - pb; }
         else if (pb > pa) { winner = m.user_a_uid; amount = pb - pa; }
@@ -545,7 +545,7 @@ export default function ChatPage() {
       )}
 
       {/* Message input */}
-      <div style={{ flexShrink: 0, padding: "8px 14px 18px", display: "flex", gap: 10, alignItems: "center" }}>
+      <div style={{ flexShrink: 0, padding: "8px 14px", paddingBottom: "calc(18px + env(safe-area-inset-bottom, 0px))", display: "flex", gap: 10, alignItems: "center" }}>
         <input
           value={input}
           onChange={e => setInput(e.target.value)}
@@ -584,7 +584,7 @@ export default function ChatPage() {
                       return (
                         <div key={String(item.id)} onClick={() => proposalTab === "mine" ? setSelectedMine(item) : setSelectedTheirs(item)}
                           style={{ borderRadius: 14, overflow: "hidden", border: isSelected ? "3px solid #FFC543" : "3px solid transparent", cursor: "pointer", position: "relative", aspectRatio: "1/1", background: "#ddd" }}>
-                          {item.image_url && <img src={item.image_url} alt={item.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                          {item.image_url && <img src={item.image_url} alt={item.title} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
                           {isSelected && <div style={{ position: "absolute", inset: 0, background: "rgba(255,197,67,0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontSize: 22 }}>✓</span></div>}
                           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(0,0,0,0.45)", padding: "3px 6px" }}>
                             <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.title ?? "Item"}</p>
@@ -600,7 +600,7 @@ export default function ChatPage() {
               <div style={{ padding: "10px 16px 0", display: "flex", gap: 8 }}>
                 {[{ label: "My item", item: selectedMine }, { label: "Their item", item: selectedTheirs }].map(({ label, item }) => (
                   <div key={label} style={{ flex: 1, background: "#ede8dc", borderRadius: 14, padding: "8px 10px", display: "flex", alignItems: "center", gap: 8 }}>
-                    {item?.image_url && <img src={item.image_url} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />}
+                    {item?.image_url && <img src={item.image_url} alt="" loading="lazy" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />}
                     <div>
                       <p style={{ margin: 0, fontSize: 10, color: "#9b8f7a", fontWeight: 600 }}>{label}</p>
                       <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: "#3c2f22" }}>{item ? (item.title ?? "Item") : "—"}</p>

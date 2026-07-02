@@ -5,6 +5,8 @@ import Image from "next/image";
 export type CardData = {
   id: string;
   photo: string;
+  photoCount?: number;
+  photoIdx?: number;
   title: string;
   location: string;
   username: string;
@@ -67,7 +69,7 @@ export function SwipeCard({ card, height }: { card: CardData; height?: number | 
         <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.4)", borderRadius: 2 }} />
       </div>
 
-      {/* Indicateurs pagination — 3 barres */}
+      {/* Indicateurs pagination — dynamiques selon le nombre de photos */}
       <div
         style={{
           position: "absolute",
@@ -80,9 +82,9 @@ export function SwipeCard({ card, height }: { card: CardData; height?: number | 
           zIndex: 3,
         }}
       >
-        <div style={{ width: 22, height: 4, borderRadius: 2, background: "white" }} />
-        <div style={{ width: 22, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.32)" }} />
-        <div style={{ width: 22, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.32)" }} />
+        {Array.from({ length: Math.max(card.photoCount ?? 1, 1) }).map((_, i) => (
+          <div key={i} style={{ width: 22, height: 4, borderRadius: 2, background: i === (card.photoIdx ?? 0) ? "white" : "rgba(255,255,255,0.32)" }} />
+        ))}
       </div>
 
       {/* Titre de l'article */}

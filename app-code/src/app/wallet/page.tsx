@@ -38,6 +38,7 @@ function WalletContent() {
   const [txs, setTxs] = useState<Tx[]>([]);
   const [toast, setToast] = useState("");
   const [buying, setBuying] = useState<number | null>(null);
+  const [coinsInfoOpen, setCoinsInfoOpen] = useState(false);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -49,7 +50,7 @@ function WalletContent() {
     if (!user) { router.replace("/login"); return; }
 
     const { data: prof, error: profErr } = await supabase
-      .from("profiles").select("coins_balance, reserved_coins").eq("id", user.id).single();
+      .from("profiles").select("*").eq("id", user.id).single();
     if (profErr) console.error("wallet/profiles:", profErr.message);
     if (typeof prof?.coins_balance === "number") setBalance(prof.coins_balance);
     else setBalance(0);
@@ -114,11 +115,12 @@ function WalletContent() {
   const available = safeBalance - reserved;
 
   return (
-    <div style={{ position: "relative", width: "100%", minHeight: "100dvh", background: "#F9F4E8", fontFamily: FONT }}>
+    <div style={{ position: "relative", width: "100%", minHeight: "100dvh", background: "#F9F4E8", fontFamily: FONT, animation: "fadeSlideUp 0.22s ease-out both" }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      {/* Header unifié */}
+      {/* Header — fixed */}
       <div style={{
-        position: "relative", background: "#3c2f22",
+        position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+        background: "#3c2f22",
         height: "calc(68px + max(env(safe-area-inset-top), 44px))",
         borderBottomLeftRadius: 30, borderBottomRightRadius: 30,
         display: "flex", alignItems: "flex-end", justifyContent: "center",
@@ -132,6 +134,9 @@ function WalletContent() {
         </div>
         <HeaderActions />
       </div>
+
+      {/* Spacer for fixed header */}
+      <div style={{ height: "calc(68px + max(env(safe-area-inset-top), 44px))" }} />
 
       <div style={{ padding: "20px 18px 120px" }}>
         {/* Titre centré italic */}
@@ -162,8 +167,49 @@ function WalletContent() {
             <div style={{ flex: 1 }}>
               <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 13 }}>Reserved</div>
               <div style={{ color: "#FFC543", fontSize: 20, fontWeight: 800, marginTop: 3 }}>{reserved}</div>
+              {reserved > 0 && <div style={{ color: "rgba(255,255,255,0.45)", fontSize: 10, marginTop: 2 }}>items listed</div>}
             </div>
           </div>
+        </div>
+
+        {/* How coins work — collapsible */}
+        <div style={{ marginTop: 18, background: "#F9F4E8", borderRadius: 18, border: "1.5px solid #E8E4DC", borderLeft: "4px solid #FFC543", overflow: "hidden" }}>
+          <button
+            onClick={() => setCoinsInfoOpen(o => !o)}
+            style={{ width: "100%", background: "none", border: "none", cursor: "pointer", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}
+          >
+            <span style={{ fontSize: 14, fontWeight: 700, color: "#3c2f22" }}>ℹ️ How do coins work?</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ transform: coinsInfoOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.25s" }}>
+              <path d="M6 9l6 6 6-6" stroke="#3c2f22" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          {coinsInfoOpen && (
+            <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
+              <p style={{ margin: 0, fontSize: 13, color: "#5c4f3a", lineHeight: 1.6 }}>
+                Every item on TRADE has a coins value — automatically set by AI based on brand, condition, and category. A North Face jacket in great condition is worth more coins than a worn H&M t-shirt.
+              </p>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: 13, fontWeight: 700, color: "#3c2f22" }}>Why coins exist</p>
+                <p style={{ margin: 0, fontSize: 13, color: "#5c4f3a", lineHeight: 1.6 }}>
+                  Not every trade is equal. Coins let you balance the difference. If you want an item worth 120 coins but yours is worth 50, you can add 70 coins to make the trade fair.
+                </p>
+              </div>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: 13, fontWeight: 700, color: "#3c2f22" }}>Where coins come from</p>
+                <p style={{ margin: "0 0 3px", fontSize: 13, color: "#5c4f3a", lineHeight: 1.6 }}>· When you list an item, its coins value is added to your balance</p>
+                <p style={{ margin: 0, fontSize: 13, color: "#5c4f3a", lineHeight: 1.6 }}>· You can also buy coins if you need more</p>
+              </div>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: 13, fontWeight: 700, color: "#3c2f22" }}>When a trade completes</p>
+                <p style={{ margin: 0, fontSize: 13, color: "#5c4f3a", lineHeight: 1.6 }}>
+                  Coins transfer automatically. You give yours, you receive theirs. Everyone walks away with fair value.
+                </p>
+              </div>
+              <p style={{ margin: 0, fontSize: 13, color: "#5c4f3a", lineHeight: 1.6, fontStyle: "italic" }}>
+                Buy coins if you want to trade up for something worth more than what you have.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Buy coins */}
@@ -174,6 +220,7 @@ function WalletContent() {
             return (
               <button
                 key={p.coins}
+                className="btn-cta"
                 onClick={() => buyPack(p.coins)}
                 disabled={!!buying}
                 style={{
@@ -220,7 +267,7 @@ function WalletContent() {
         </div>
       </div>
       {toast && (
-        <div style={{ position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", background: "#2D1A0A", color: "#FFC543", fontWeight: 700, fontSize: 14, padding: "12px 20px", borderRadius: 24, zIndex: 95, whiteSpace: "nowrap", boxShadow: "0 4px 18px rgba(0,0,0,0.3)", maxWidth: "calc(100% - 40px)", textAlign: "center" }}>{toast}</div>
+        <div style={{ position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", background: "#2D1A0A", color: "#FFC543", fontWeight: 700, fontSize: 14, padding: "12px 20px", borderRadius: 24, zIndex: 95, whiteSpace: "nowrap", boxShadow: "0 4px 18px rgba(0,0,0,0.3)", maxWidth: "calc(100% - 40px)", textAlign: "center", animation: "toastIn 0.22s ease-out both" }}>{toast}</div>
       )}
     </div>
   );

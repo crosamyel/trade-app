@@ -204,7 +204,7 @@ export default function DetailPage() {
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
-        <img src={currentPhoto} alt={item.title ?? "Item"} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        <img src={currentPhoto} alt={item.title ?? "Item"} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
 
         {/* Gradient bas */}
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.25) 0%, transparent 35%, transparent 55%, rgba(0,0,0,0.55) 100%)", pointerEvents: "none" }} />
@@ -292,7 +292,7 @@ export default function DetailPage() {
           >
             <div style={{ width: 64, height: 64, borderRadius: "50%", background: "#FFC543", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
               {item.profiles?.avatar_url
-                ? <img src={item.profiles.avatar_url} style={{ width: "100%", height: "100%", objectFit: "cover" }} alt="" />
+                ? <img src={item.profiles.avatar_url} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} alt="" />
                 : <span style={{ fontSize: 30, fontWeight: 800, fontStyle: "italic", color: "#fff" }}>{initial}</span>
               }
             </div>

@@ -54,7 +54,7 @@ export default function NotificationsPage() {
     try {
       const { data, error } = await supabase
         .from("notifications")
-        .select("*")
+        .select("id, user_id, type, body, read, link, created_at")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(60);
@@ -63,8 +63,17 @@ export default function NotificationsPage() {
         const list = (data as Notification[]) ?? [];
         setUseNewTable(true);
         setNotifs(list);
-        setHasUnread(list.some(n => !n.read));
+        const hasAnyUnread = list.some(n => !n.read);
+        setHasUnread(hasAnyUnread);
         setLoading(false);
+        // Auto-mark all as read when page opens
+        if (hasAnyUnread) {
+          try {
+            await supabase.from("notifications").update({ read: true }).eq("user_id", user.id).eq("read", false);
+            setNotifs(list.map(n => ({ ...n, read: true })));
+            setHasUnread(false);
+          } catch { /* ok */ }
+        }
         return;
       }
     } catch { /* table may not exist yet */ }
@@ -88,19 +97,17 @@ export default function NotificationsPage() {
 
   // Realtime: new notifications for this user
   useEffect(() => {
-    let userId: string | null = null;
+    let ch: ReturnType<typeof supabase.channel> | null = null;
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return;
-      userId = user.id;
-      const ch = supabase.channel(`notifs_page:${user.id}`)
+      ch = supabase.channel(`notifs_page:${user.id}`)
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` }, (payload) => {
           const n = payload.new as Notification;
           setNotifs(prev => [n, ...prev]);
           setHasUnread(true);
         }).subscribe();
-      return () => { supabase.removeChannel(ch); };
     });
-    return () => { if (userId) supabase.removeChannel(supabase.channel(`notifs_page:${userId}`)); };
+    return () => { if (ch) supabase.removeChannel(ch); };
   }, []);
 
   async function markAllRead() {
@@ -129,10 +136,11 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div style={{ position: "relative", width: "100%", minHeight: "100dvh", background: "#F9F4E8", fontFamily: FONT }}>
+    <div style={{ position: "relative", width: "100%", minHeight: "100dvh", background: "#F9F4E8", fontFamily: FONT, animation: "fadeSlideUp 0.22s ease-out both" }}>
       {/* Header */}
       <div style={{
-        position: "relative", background: "#3c2f22",
+        position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+        background: "#3c2f22",
         height: "calc(68px + max(env(safe-area-inset-top, 0px), 44px))",
         borderBottomLeftRadius: 30, borderBottomRightRadius: 30,
         display: "flex", alignItems: "flex-end", justifyContent: "center",
@@ -149,6 +157,9 @@ export default function NotificationsPage() {
         )}
       </div>
 
+      {/* Spacer for fixed header */}
+      <div style={{ height: "calc(68px + max(env(safe-area-inset-top, 0px), 44px))" }} />
+
       <div style={{ padding: "16px 16px 120px" }}>
         {loading ? (
           <p style={{ textAlign: "center", color: "#2D1A0A", opacity: 0.5, marginTop: 40, fontWeight: 600 }}>Loading…</p>
@@ -160,7 +171,7 @@ export default function NotificationsPage() {
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {notifs.map(n => {
+            {notifs.map((n, idx) => {
               const unread = !n.read;
               return (
                 <button
@@ -173,6 +184,7 @@ export default function NotificationsPage() {
                     display: "flex", alignItems: "center", gap: 12,
                     boxShadow: unread ? "0 2px 12px rgba(0,0,0,0.09)" : "none",
                     borderLeft: unread ? "3px solid #FFC543" : "3px solid transparent",
+                    animation: `listItemIn 0.22s ease-out ${Math.min(idx, 4) * 50}ms both`,
                   }}
                 >
                   <div style={{

@@ -18,11 +18,12 @@ const ROUTES: Record<NavId, string> = {
 
 /* La nav n'apparaît QUE sur ces pages */
 const SHOW_ON = ["/home", "/search", "/matches", "/profile", "/upload"];
+const HIDE_ON = ["/profile/edit"];
 
 function activeFromPath(path: string): NavId | null {
   if (path.startsWith("/upload")) return "plus";
   if (path.startsWith("/matches")) return "msg";
-  if (path.startsWith("/profile")) return "profile";
+  if (path === "/profile") return "profile";
   if (path.startsWith("/search")) return "search";
   if (path.startsWith("/home")) return "home";
   return null;
@@ -34,10 +35,18 @@ export function BottomNav() {
   const active = activeFromPath(pathname);
 
   const [lastActive, setLastActive] = useState<NavId>("home");
+  const [scrolled, setScrolled] = useState(false);
+
   useEffect(() => { if (active) setLastActive(active); }, [active]);
 
+  useEffect(() => {
+    function onScroll() { setScrolled(window.scrollY > 50); }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   /* Allowlist : n'affiche la nav que sur les pages autorisées */
-  const visible = SHOW_ON.some((p) => pathname.startsWith(p));
+  const visible = SHOW_ON.some((p) => pathname.startsWith(p)) && !HIDE_ON.some((p) => pathname.startsWith(p));
   if (!visible) return null;
 
   const shown: NavId = active ?? lastActive;
@@ -48,7 +57,8 @@ export function BottomNav() {
       position: "fixed",
       bottom: "calc(4px + env(safe-area-inset-bottom, 0px))",
       left: "50%",
-      transform: "translateX(-50%)",
+      transform: scrolled ? "translateX(-50%) scale(0.92)" : "translateX(-50%)",
+      transition: "transform 0.3s ease",
       width: "calc(100% - 48px)",
       maxWidth: 380,
       height: 64,

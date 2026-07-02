@@ -1,6 +1,11 @@
 import OpenAI from 'openai'
 
-const PROMPT = `Tu es un expert en mode, vêtements et détection de contrefaçons. Analyse cette image de vêtement et retourne UNIQUEMENT un objet JSON valide, sans markdown, sans backticks, sans texte supplémentaire.
+const PROMPT = `Tu es un expert en mode, vêtements et détection de contrefaçons. Analyse cette image et retourne UNIQUEMENT un objet JSON valide, sans markdown, sans backticks, sans texte supplémentaire.
+
+IMPORTANT : Si l'image ne montre PAS un vêtement ou accessoire de mode (par exemple : nourriture, animal, paysage, visage, document, écran, etc.), retourne UNIQUEMENT :
+{"error": "not_clothing", "reason": "courte explication en anglais de pourquoi ce n'est pas un vêtement"}
+
+Sinon, si c'est bien un vêtement ou accessoire, retourne le JSON suivant :
 
 Voici le JSON attendu :
 
@@ -60,6 +65,11 @@ export async function POST(request) {
     } catch {
       console.error('[analyze-clothing] parse failed:', raw)
       return Response.json({ error: 'parse_error' }, { status: 500 })
+    }
+
+    // Check not_clothing response
+    if (json.error === 'not_clothing') {
+      return Response.json({ error: 'not_clothing', reason: json.reason ?? 'Not a clothing item' }, { status: 422 })
     }
 
     // Validate coins_value

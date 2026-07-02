@@ -21,6 +21,7 @@ type Clothing = {
   size?: string;
   condition?: string;
   price_coins?: number;
+  coins_value?: number;
   profiles?: { username?: string; avatar_url?: string } | null;
 };
 
@@ -99,11 +100,11 @@ export default function SearchPage() {
       setMe(user.id);
 
       const { data: mine } = await supabase
-        .from("clothing").select("*").eq("user_id", user.id).eq("status", "active");
+        .from("clothing").select("id, user_id, image_url, title, size, condition, coins_value").eq("user_id", user.id).eq("status", "active");
       setMyItems((mine as Clothing[]) ?? []);
 
       try {
-        const { data: prof } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+        const { data: prof } = await supabase.from("profiles").select("id, coins_balance").eq("id", user.id).single();
         if (typeof prof?.coins_balance === "number") setMyCoins(prof.coins_balance);
       } catch { /* profiles indisponible */ }
     }
@@ -120,7 +121,9 @@ export default function SearchPage() {
       function build(withJoin: boolean) {
         let q = supabase
           .from("clothing")
-          .select(withJoin ? "*, profiles(username, avatar_url)" : "*")
+          .select(withJoin
+            ? "id, user_id, image_url, title, size, condition, coins_value, style, category, color, profiles(username, avatar_url)"
+            : "id, user_id, image_url, title, size, condition, coins_value, style, category, color")
           .neq("user_id", me)
           .eq("status", "active");
         if (search.trim()) q = q.ilike("title", `%${search.trim()}%`);
@@ -129,7 +132,7 @@ export default function SearchPage() {
         if (color) q = q.ilike("color", `%${color}%`);
         if (size) q = q.eq("size", size);
         if (condition) q = q.eq("condition", condition);
-        if (price > 0) q = q.lte("price_coins", price);
+        if (price > 0) q = q.lte("coins_value", price);
         return q.order("created_at", { ascending: false }).limit(30);
       }
 
@@ -197,10 +200,11 @@ export default function SearchPage() {
   }
 
   return (
-    <div style={{ position: "relative", width: "100%", minHeight: "100dvh", background: "#F9F4E8", fontFamily: FONT }}>
-      {/* Header standard (comme les autres pages) */}
+    <div style={{ position: "relative", width: "100%", minHeight: "100dvh", background: "#F9F4E8", fontFamily: FONT, animation: "fadeSlideUp 0.22s ease-out both" }}>
+      {/* Header — fixed */}
       <div style={{
-        position: "relative", background: "#3c2f22",
+        position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+        background: "#3c2f22",
         height: "calc(68px + max(env(safe-area-inset-top), 44px))",
         borderBottomLeftRadius: 30, borderBottomRightRadius: 30,
         display: "flex", alignItems: "flex-end", justifyContent: "center",
@@ -211,6 +215,9 @@ export default function SearchPage() {
         </div>
         <HeaderActions />
       </div>
+
+      {/* Spacer for fixed header */}
+      <div style={{ height: "calc(68px + max(env(safe-area-inset-top), 44px))" }} />
 
       {/* Titre "Explore" centré + icône filtres à gauche */}
       <div style={{ position: "relative", height: 44, marginTop: 18, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -309,7 +316,7 @@ export default function SearchPage() {
 
       {/* Toast */}
       {toast && (
-        <div style={{ position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", background: "#2D1A0A", color: "#FFC543", fontWeight: 700, fontSize: 14, padding: "10px 18px", borderRadius: 22, zIndex: 95 }}>{toast}</div>
+        <div style={{ position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)", background: "#2D1A0A", color: "#FFC543", fontWeight: 700, fontSize: 14, padding: "10px 18px", borderRadius: 22, zIndex: 95, animation: "toastIn 0.22s ease-out both" }}>{toast}</div>
       )}
 
       {/* Détail (overlay) */}
@@ -360,7 +367,7 @@ function ResultCard({ item, onClick }: { item: Clothing; onClick: () => void }) 
   return (
     <button onClick={onClick} style={{ textAlign: "left", padding: 0, border: "none", background: "#F9F4E8", borderRadius: 20, overflow: "hidden", cursor: "pointer", boxShadow: "0 3px 12px rgba(0,0,0,0.06)" }}>
       <div style={{ position: "relative", width: "100%", aspectRatio: "4 / 5", background: "#ece6d8" }}>
-        {item.image_url && <img src={item.image_url} alt={item.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+        {item.image_url && <img src={item.image_url} alt={item.title} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
         <span style={{ position: "absolute", top: 8, left: 8, fontSize: 11, fontWeight: 700, color: "#fff", background: cond.bg, borderRadius: 20, padding: "3px 9px" }}>{cond.label}</span>
       </div>
       <div style={{ padding: 10 }}>
@@ -369,7 +376,7 @@ function ResultCard({ item, onClick }: { item: Clothing; onClick: () => void }) 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 7 }}>
           <span style={{ fontSize: 12, color: "#2D1A0A", fontWeight: 600 }}>{item.size ?? "?"}</span>
           <span style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 14, fontWeight: 800, color: "#2D1A0A" }}>
-            {item.price_coins ?? 20}
+            {item.price_coins ?? item.coins_value ?? "?"}
             <span style={{ position: "relative", display: "inline-block", width: 14, height: 14 }}><Image src="/coin.png" alt="" fill style={{ objectFit: "contain" }} /></span>
           </span>
         </div>
@@ -403,7 +410,7 @@ function ProfileCard({ user, onClick }: { user: UserProfile; onClick: () => void
         fontSize: 22, fontWeight: 800, color: "#2D1A0A",
       }}>
         {user.avatar_url
-          ? <img src={user.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          ? <img src={user.avatar_url} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           : (user.username?.[0] ?? "?").toUpperCase()}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -428,10 +435,10 @@ function ProfileCard({ user, onClick }: { user: UserProfile; onClick: () => void
 function DetailOverlay({ item, onClose, onTrade }: { item: Clothing; onClose: () => void; onTrade: () => void }) {
   const cond = condStyle(item.condition);
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 80, background: "rgba(20,12,4,0.55)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, background: "#F9F4E8", borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: "hidden", maxHeight: "88dvh", display: "flex", flexDirection: "column" }}>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 80, background: "rgba(20,12,4,0.55)", display: "flex", alignItems: "flex-end", justifyContent: "center", animation: "backdropFade 0.22s ease both" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, background: "#F9F4E8", borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: "hidden", maxHeight: "88dvh", display: "flex", flexDirection: "column", animation: "sheetSlideUp 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both" }}>
         <div style={{ position: "relative", width: "100%", aspectRatio: "1 / 1", background: "#ece6d8", flexShrink: 0 }}>
-          {item.image_url && <img src={item.image_url} alt={item.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+          {item.image_url && <img src={item.image_url} alt={item.title} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
           <button onClick={onClose} style={{ position: "absolute", top: 12, right: 12, width: 34, height: 34, borderRadius: "50%", background: "rgba(0,0,0,0.45)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }} aria-label="Close">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2L14 14M14 2L2 14" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" /></svg>
           </button>
@@ -441,11 +448,11 @@ function DetailOverlay({ item, onClose, onTrade }: { item: Clothing; onClose: ()
           <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: "#2D1A0A" }}>{item.title ?? "Item"}</h2>
           <p style={{ margin: "4px 0 14px", fontSize: 14, color: "#9b8f7a" }}>{item.brand ?? "—"} · size {item.size ?? "?"}</p>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 18 }}>
-            <span style={{ fontSize: 22, fontWeight: 800, color: "#2D1A0A" }}>{item.price_coins ?? 20}</span>
+            <span style={{ fontSize: 22, fontWeight: 800, color: "#2D1A0A" }}>{item.price_coins ?? item.coins_value ?? "?"}</span>
             <span style={{ position: "relative", display: "inline-block", width: 22, height: 22 }}><Image src="/coin.png" alt="" fill style={{ objectFit: "contain" }} /></span>
             <span style={{ marginLeft: "auto", fontSize: 13, color: "#9b8f7a" }}>@{item.profiles?.username ?? "user"}</span>
           </div>
-          <button onClick={onTrade} style={{ width: "100%", height: 54, borderRadius: 27, border: "none", background: "#FFC543", color: "#2D1A0A", fontWeight: 800, fontSize: 17, cursor: "pointer", boxShadow: "0 6px 18px rgba(255,197,67,0.45)" }}>
+          <button className="btn-cta" onClick={onTrade} style={{ width: "100%", height: 54, borderRadius: 27, border: "none", background: "#FFC543", color: "#2D1A0A", fontWeight: 800, fontSize: 17, cursor: "pointer", boxShadow: "0 6px 18px rgba(255,197,67,0.45)" }}>
             Trade
           </button>
         </div>

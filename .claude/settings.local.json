@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /Users/SamyelCrokaert/Documents/TRADE/app-code log --oneline -10)"
+    ]
+  }
+}

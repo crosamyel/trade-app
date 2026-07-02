@@ -41,6 +41,14 @@ export default function UploadPage() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [photos, setPhotos] = useState<Photos>({ front: null, back: null, label: null, detail: null });
   const [analysis, setAnalysis] = useState<Analysis>(EMPTY_ANALYSIS);
+  const [notClothingError, setNotClothingError] = useState(false);
+
+  function handleNotClothing() {
+    setPhotos({ front: null, back: null, label: null, detail: null });
+    setStep(1);
+    setNotClothingError(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   // Reçoit les données IA et passe à l'étape 3
   function handleAnalysisDone(data: Partial<Analysis>) {
@@ -66,6 +74,24 @@ export default function UploadPage() {
       position: "relative", width: "100%", minHeight: "100dvh",
       background: "#f9f4e8", fontFamily: FONT, overflowX: "hidden",
     }}>
+      <style>{`@keyframes ncfade { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }`}</style>
+      {notClothingError && (
+        <div
+          onAnimationEnd={() => setNotClothingError(false)}
+          style={{
+            position: "fixed",
+            top: "calc(68px + max(env(safe-area-inset-top), 44px) + 12px)",
+            left: 16, right: 16, zIndex: 200,
+            background: "linear-gradient(135deg, #e03c3c, #f97316)",
+            color: "#fff", borderRadius: 12, padding: 16,
+            fontSize: 14, fontWeight: 600, lineHeight: 1.5,
+            boxShadow: "0 4px 20px rgba(224,60,60,0.4)",
+            animation: "ncfade 4s ease-out forwards",
+          }}
+        >
+          ⚠️ This doesn&apos;t look like a clothing item. Please upload a clear photo of the item you want to trade.
+        </div>
+      )}
       <Header />
       <ProgressBar step={step} />
 
@@ -73,7 +99,7 @@ export default function UploadPage() {
         <StepPhoto photos={photos} setPhotos={setPhotos} onAnalyse={() => setStep(2)} onMulti={() => router.push("/upload/multi")} />
       )}
       {step === 2 && (
-        <StepAnalyse photos={photos} onDone={handleAnalysisDone} />
+        <StepAnalyse photos={photos} onDone={handleAnalysisDone} onNotClothing={handleNotClothing} />
       )}
       {step === 3 && (
         <StepVerify photos={photos} analysis={analysis} setAnalysis={setAnalysis} />
@@ -85,18 +111,22 @@ export default function UploadPage() {
 /* ===== HEADER ===== */
 function Header() {
   return (
-    <div style={{
-      position: "relative", background: "#3c2f22",
-      height: "calc(68px + max(env(safe-area-inset-top), 44px))",
-      borderBottomLeftRadius: 30, borderBottomRightRadius: 30,
-      display: "flex", alignItems: "flex-end", justifyContent: "center",
-      paddingTop: "max(env(safe-area-inset-top), 44px)", paddingBottom: 14,
-    }}>
-      <div style={{ position: "relative", width: 130, height: 40 }}>
-        <Image src="/trade-logo-main.png" alt="TRADE" fill style={{ objectFit: "contain" }} />
+    <>
+      <div style={{
+        position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+        background: "#3c2f22",
+        height: "calc(68px + max(env(safe-area-inset-top), 44px))",
+        borderBottomLeftRadius: 30, borderBottomRightRadius: 30,
+        display: "flex", alignItems: "flex-end", justifyContent: "center",
+        paddingTop: "max(env(safe-area-inset-top), 44px)", paddingBottom: 14,
+      }}>
+        <div style={{ position: "relative", width: 130, height: 40 }}>
+          <Image src="/trade-logo-main.png" alt="TRADE" fill style={{ objectFit: "contain" }} />
+        </div>
+        <HeaderActions />
       </div>
-      <HeaderActions />
-    </div>
+      <div style={{ height: "calc(68px + max(env(safe-area-inset-top), 44px))" }} />
+    </>
   );
 }
 
@@ -195,7 +225,9 @@ function PhotoSlot({ meta, value, onPick, onClear }: {
   onPick: (dataUrl: string) => void;
   onClear: () => void;
 }) {
-  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
+  const [showPicker, setShowPicker] = useState(false);
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -203,7 +235,8 @@ function PhotoSlot({ meta, value, onPick, onClear }: {
     const reader = new FileReader();
     reader.onload = () => onPick(reader.result as string);
     reader.readAsDataURL(file);
-    e.target.value = ""; // permet de re-choisir le même fichier
+    e.target.value = "";
+    setShowPicker(false);
   }
 
   return (
@@ -211,7 +244,6 @@ function PhotoSlot({ meta, value, onPick, onClear }: {
       {value ? (
         <>
           <img src={value} alt={meta.label} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 16 }} />
-          {/* X de suppression */}
           <button
             onClick={onClear}
             style={{
@@ -225,9 +257,31 @@ function PhotoSlot({ meta, value, onPick, onClear }: {
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 2L10 10M10 2L2 10" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" /></svg>
           </button>
         </>
+      ) : showPicker ? (
+        <div style={{
+          width: "100%", height: "100%", borderRadius: 16,
+          background: "#3c2f22", border: "2px dashed #b89b6e",
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10,
+        }}>
+          <button
+            onClick={() => cameraRef.current?.click()}
+            style={{ width: "80%", height: 40, borderRadius: 20, background: "#FFC543", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#2D1A0A", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="2" y="7" width="20" height="14" rx="3" stroke="currentColor" strokeWidth="2" /><circle cx="12" cy="14" r="4" stroke="currentColor" strokeWidth="2" /><path d="M9 7l1.5-3h3L15 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+            Camera
+          </button>
+          <button
+            onClick={() => galleryRef.current?.click()}
+            style={{ width: "80%", height: 40, borderRadius: 20, background: "rgba(255,255,255,0.12)", border: "1.5px solid rgba(255,255,255,0.3)", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#f3ead7", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="2" /><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" /><path d="M3 15l5-5 4 4 3-3 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+            Gallery
+          </button>
+          <button onClick={() => setShowPicker(false)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.45)", fontSize: 12, cursor: "pointer" }}>Cancel</button>
+        </div>
       ) : (
         <button
-          onClick={() => fileRef.current?.click()}
+          onClick={() => setShowPicker(true)}
           style={{
             width: "100%", height: "100%", borderRadius: 16,
             background: "#3c2f22", border: "2px dashed #b89b6e",
@@ -255,7 +309,8 @@ function PhotoSlot({ meta, value, onPick, onClear }: {
         </div>
       )}
 
-      <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={handleFile} style={{ display: "none" }} />
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handleFile} style={{ display: "none" }} />
+      <input ref={galleryRef} type="file" accept="image/*" onChange={handleFile} style={{ display: "none" }} />
     </div>
   );
 }
@@ -269,24 +324,43 @@ function BoltIcon({ color, small }: { color: string; small?: boolean }) {
   );
 }
 
+const ANALYSE_MESSAGES = [
+  "Analyzing your item...",
+  "Detecting brand...",
+  "Estimating condition...",
+  "Calculating coins value...",
+];
+
 /* ===== ÉTAPE 2 — ANALYSE (IA réelle GPT-4o) ===== */
-function StepAnalyse({ photos, onDone }: {
+function StepAnalyse({ photos, onDone, onNotClothing }: {
   photos: Photos;
   onDone: (data: Partial<Analysis>) => void;
+  onNotClothing: () => void;
 }) {
   const [phase, setPhase] = useState(0); // 0 type, 1 estimation, 2 description
+  const [msgIdx, setMsgIdx] = useState(0);
   const [failed, setFailed] = useState(false);
   const [failReason, setFailReason] = useState("");
 
   // Ref pour toujours appeler la dernière version d'onDone sans re-déclencher l'effet
   const onDoneRef = useRef(onDone);
   useEffect(() => { onDoneRef.current = onDone; });
+  const onNotClothingRef = useRef(onNotClothing);
+  useEffect(() => { onNotClothingRef.current = onNotClothing; });
 
   // Animation cosmétique de la checklist
   useEffect(() => {
     const t1 = setTimeout(() => setPhase(1), 900);
     const t2 = setTimeout(() => setPhase(2), 1800);
     return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+
+  // Cycling loading messages
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMsgIdx((i) => (i + 1) % ANALYSE_MESSAGES.length);
+    }, 1500);
+    return () => clearInterval(interval);
   }, []);
 
   // Appel IA réel : étiquette (marque/taille/matière) + face avant (style/condition/desc)
@@ -317,6 +391,7 @@ function StepAnalyse({ photos, onDone }: {
 
     async function run() {
       let analysisData: Partial<Analysis> = {};
+      let isNotClothing = false;
       try {
         const [compFront, compLabel] = await Promise.all([
           photos.front  ? compress(photos.front)  : Promise.resolve(null),
@@ -330,10 +405,13 @@ function StepAnalyse({ photos, onDone }: {
         });
         const data = await res.json();
         console.log("[AI] résultat brut:", data);
-        if (res.status === 422 && data.error === 'invalid_image') {
+        if (res.status === 422 && data.error === 'not_clothing') {
+          isNotClothing = true;
+          if (!cancelled) onNotClothingRef.current();
+        } else if (res.status === 422 && data.error === 'invalid_image') {
           if (!cancelled) {
             setFailed(true);
-            setFailReason(data.reason || "This doesn't look like a real clothing photo.");
+            setFailReason(data.reason || "Image not readable — fill in manually.");
           }
         } else if (res.ok) {
           analysisData = {
@@ -356,8 +434,10 @@ function StepAnalyse({ photos, onDone }: {
       } catch (e) {
         if (!cancelled) { console.error(e); setFailed(true); }
       } finally {
-        const wait = Math.max(0, 1800 - (Date.now() - started));
-        setTimeout(() => { if (!cancelled) onDoneRef.current(analysisData); }, wait);
+        if (!isNotClothing) {
+          const wait = Math.max(0, 1800 - (Date.now() - started));
+          setTimeout(() => { if (!cancelled) onDoneRef.current(analysisData); }, wait);
+        }
       }
     }
     run();
@@ -375,7 +455,7 @@ function StepAnalyse({ photos, onDone }: {
           <RefreshIcon />
         </span>
       </div>
-      <p style={{ textAlign: "center", fontWeight: 600, color: "#2A2A2A", margin: "0 0 20px" }}>AI is analysing...</p>
+      <p style={{ textAlign: "center", fontWeight: 600, color: "#2A2A2A", margin: "0 0 20px", transition: "opacity 0.3s", minHeight: 22 }}>{ANALYSE_MESSAGES[msgIdx]}</p>
 
       {/* Checklist */}
       <div style={{ background: "#fff", borderRadius: 18, padding: "16px 18px", boxShadow: "0 4px 16px rgba(0,0,0,0.06)" }}>

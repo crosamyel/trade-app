@@ -13,14 +13,26 @@ type Clothing = {
   id: string | number;
   user_id: string;
   image_url?: string;
+  image_back_url?: string;
+  image_label_url?: string;
+  image_detail_url?: string;
   title?: string;
   location?: string;
   size?: string;
+  style?: string;
   condition?: string;
+  coins_value?: number;
   views?: number;
   distance?: number;
-  profiles?: { username?: string; avatar_url?: string } | null;
+  featured?: boolean;
+  profiles?: { username?: string; avatar_url?: string; city?: string } | null;
 };
+
+function getPhotos(item: Clothing): string[] {
+  const urls = [item.image_url, item.image_back_url, item.image_label_url, item.image_detail_url]
+    .filter((u): u is string => !!u);
+  return urls.length > 0 ? urls : ["/card-photo-01.png"];
+}
 
 type MatchInfo = { myPhoto: string; theirPhoto: string; theirUserId: string };
 
@@ -33,6 +45,21 @@ type Ad = {
   isAd: true;
 };
 
+// Client-side relevance scorer — higher = shown first
+function scoreClothing(item: Clothing, myCity: string, prefStyles: string[], prefSizes: string[], myAvgCoins: number): number {
+  let score = 0;
+  if (item.featured) score += 1000;
+  if (item.profiles?.city && myCity && item.profiles.city.toLowerCase() === myCity.toLowerCase()) score += 30;
+  if (prefStyles.length > 0 && item.style && prefStyles.some(s => item.style!.toLowerCase().includes(s.toLowerCase()))) score += 25;
+  if (prefSizes.length > 0 && item.size && prefSizes.some(s => item.size!.toUpperCase() === s.toUpperCase())) score += 20;
+  const coins = item.coins_value ?? 0;
+  const diff = Math.abs(coins - myAvgCoins);
+  if (diff <= myAvgCoins * 0.3) score += 15;
+  else if (diff <= myAvgCoins * 0.6) score += 8;
+  score += Math.random() * 5;
+  return score;
+}
+
 async function notifyUser(userId: string | null | undefined, type: string, body: string, link: string) {
   if (!userId) return;
   try {
@@ -43,13 +70,22 @@ async function notifyUser(userId: string | null | undefined, type: string, body:
 export default function HomePage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<{ id: string } | null>(null);
+  const [isBanned, setIsBanned] = useState(false);
   const [stack, setStack] = useState<Clothing[]>([]);
   const [myItems, setMyItems] = useState<Clothing[]>([]);
   const [myCoins, setMyCoins] = useState(0);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [saved, setSaved] = useState(false);
   const [activeAds, setActiveAds] = useState<Ad[]>([]);
+  const [photoIdx, setPhotoIdx] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const hasMoreRef = useRef(true);
+  const feedOffsetRef = useRef(0);
+  const currentUserRef = useRef<{ id: string } | null>(null);
+  const prefsRef = useRef({ sizes: [] as string[], styles: [] as string[], minCoins: 0, city: "", avgCoins: 50 });
+  const likedIdsRef = useRef<string[]>([]);
 
   // Feuille "choisir mon vêtement à proposer" (Mode B — troc)
   const [proposingFor, setProposingFor] = useState<Clothing | null>(null);
@@ -74,60 +110,80 @@ export default function HomePage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.replace("/login"); return; }
       setCurrentUser({ id: user.id });
+      currentUserRef.current = { id: user.id };
 
       // Prefs + coins depuis profiles
       let pref_sizes: string[] = [];
       let pref_styles: string[] = [];
       let pref_min_coins = 0;
+      let myCity = "";
       try {
         const { data: prof } = await supabase
-          .from("profiles").select("*").eq("id", user.id).single();
+          .from("profiles").select("pref_styles, pref_sizes, pref_min_coins, city, coins_balance, banned").eq("id", user.id).maybeSingle();
+        if (prof?.banned) { setIsBanned(true); setLoading(false); return; }
         if (typeof prof?.coins_balance === "number") setMyCoins(prof.coins_balance);
         if (Array.isArray(prof?.pref_sizes)) pref_sizes = prof.pref_sizes;
         if (Array.isArray(prof?.pref_styles)) pref_styles = prof.pref_styles;
         if (typeof prof?.pref_min_coins === "number") pref_min_coins = prof.pref_min_coins;
+        if (typeof prof?.city === "string") myCity = prof.city;
       } catch { /* profiles indisponible */ }
 
-      // Feed vêtements avec filtres de prefs
-      let clothes: Clothing[] | null = null;
+      // Liked items to exclude from feed (cross-session)
+      let likedIds: string[] = [];
+      try {
+        const { data: likedRows } = await supabase.from("likes").select("clothing_id").eq("user_id", user.id);
+        likedIds = (likedRows ?? []).map((r: { clothing_id: string }) => String(r.clothing_id));
+      } catch { /* likes table may not exist */ }
+      likedIdsRef.current = likedIds;
+
+      // Own items — used for proposal sheet + myAvgCoins
+      const { data: mine } = await supabase
+        .from("clothing").select("*").eq("user_id", user.id).eq("status", "active");
+      setMyItems((mine as Clothing[]) ?? []);
+      const myAvgCoins = mine && mine.length > 0
+        ? mine.reduce((s: number, i: { coins_value?: number }) => s + (i.coins_value ?? 0), 0) / mine.length
+        : 50;
+
+      prefsRef.current = { sizes: pref_sizes, styles: pref_styles, minCoins: pref_min_coins, city: myCity, avgCoins: myAvgCoins };
+      feedOffsetRef.current = 0;
+      hasMoreRef.current = true;
+
+      const COLS = "id, user_id, image_url, image_back_url, image_label_url, image_detail_url, title, size, style, condition, coins_value, views, location, featured, profiles(username, avatar_url, city)";
+      const COLS_NOJOIN = "id, user_id, image_url, image_back_url, image_label_url, image_detail_url, title, size, style, condition, coins_value, views, location, featured";
+
+      // Fetch 100 items — sort client-side by relevance score
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q: any = supabase
-        .from("clothing")
-        .select("*, profiles(username, avatar_url)")
-        .neq("user_id", user.id)
-        .eq("status", "active")
-        .limit(20);
-      if (pref_sizes.length > 0) q = q.in("size", pref_sizes);
-      if (pref_styles.length > 0) q = q.in("style", pref_styles);
+        .from("clothing").select(COLS)
+        .neq("user_id", user.id).eq("status", "active")
+        .range(0, 99);
       if (pref_min_coins > 0) q = q.gte("coins_value", pref_min_coins);
+      if (likedIds.length > 0) q = q.not("id", "in", `(${likedIds.join(",")})`);
 
+      let clothes: Clothing[] | null = null;
       const joined = await q;
       if (joined.error) {
         console.warn("Join profiles indisponible, fallback sans profiles:", joined.error.message);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let q2: any = supabase
-          .from("clothing")
-          .select("*")
-          .neq("user_id", user.id)
-          .eq("status", "active")
-          .limit(20);
-        if (pref_sizes.length > 0) q2 = q2.in("size", pref_sizes);
-        if (pref_styles.length > 0) q2 = q2.in("style", pref_styles);
+          .from("clothing").select(COLS_NOJOIN)
+          .neq("user_id", user.id).eq("status", "active")
+          .range(0, 99);
         if (pref_min_coins > 0) q2 = q2.gte("coins_value", pref_min_coins);
+        if (likedIds.length > 0) q2 = q2.not("id", "in", `(${likedIds.join(",")})`);
         const plain = await q2;
         clothes = (plain.data as Clothing[]) ?? null;
       } else {
         clothes = (joined.data as Clothing[]) ?? null;
       }
-      setStack(clothes ?? []);
 
-      // Mes propres vêtements actifs (pour proposer en échange)
-      const { data: mine } = await supabase
-        .from("clothing")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("status", "active");
-      setMyItems((mine as Clothing[]) ?? []);
+      // Score, sort, then filter already-swiped this session
+      const seenStr = typeof window !== "undefined" ? sessionStorage.getItem("trade_seen_ids") ?? "" : "";
+      const sessionSeen = new Set(seenStr.split(",").filter(Boolean));
+      const sortedItems = [...(clothes ?? [])]
+        .sort((a, b) => scoreClothing(b, myCity, pref_styles, pref_sizes, myAvgCoins) - scoreClothing(a, myCity, pref_styles, pref_sizes, myAvgCoins))
+        .filter(c => !sessionSeen.has(String(c.id)));
+      setStack(sortedItems);
 
       // Load active ads (inactive by default, no ads shown until activated)
       try {
@@ -137,8 +193,45 @@ export default function HomePage() {
 
       setLoading(false);
     }
-    init();
+    const timeout = setTimeout(() => {
+      setLoading(prev => { if (prev) setLoadError(true); return false; });
+    }, 12000);
+    init().finally(() => clearTimeout(timeout));
   }, [router]);
+
+  // Auto-charge 10 items de plus quand il reste ≤ 3 cartes
+  useEffect(() => {
+    if (!currentUser || loadingMore || !hasMoreRef.current || loading) return;
+    if (stack.length > 0 && currentIndex >= stack.length - 3) loadMoreClothing();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, stack.length]);
+
+  async function loadMoreClothing() {
+    if (!currentUserRef.current || loadingMore || !hasMoreRef.current) return;
+    setLoadingMore(true);
+    const newOffset = feedOffsetRef.current + 100;
+    const { sizes, styles, minCoins, city, avgCoins } = prefsRef.current;
+    const likedIds = likedIdsRef.current;
+    const COLS = "id, user_id, image_url, image_back_url, image_label_url, image_detail_url, title, size, style, condition, coins_value, views, location, featured, profiles(username, avatar_url, city)";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let q: any = supabase
+      .from("clothing").select(COLS)
+      .neq("user_id", currentUserRef.current.id)
+      .eq("status", "active")
+      .range(newOffset, newOffset + 99);
+    if (minCoins > 0) q = q.gte("coins_value", minCoins);
+    if (likedIds.length > 0) q = q.not("id", "in", `(${likedIds.join(",")})`);
+    const { data } = await q;
+    if (!data || data.length === 0) { hasMoreRef.current = false; setLoadingMore(false); return; }
+    const seenStr = sessionStorage.getItem("trade_seen_ids") ?? "";
+    const seenIds = new Set(seenStr.split(",").filter(Boolean));
+    const sorted = [...(data as Clothing[])]
+      .sort((a, b) => scoreClothing(b, city, styles, sizes, avgCoins) - scoreClothing(a, city, styles, sizes, avgCoins))
+      .filter(c => !seenIds.has(String(c.id)));
+    if (sorted.length > 0) setStack(prev => [...prev, ...sorted]);
+    feedOffsetRef.current = newOffset;
+    setLoadingMore(false);
+  }
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -157,9 +250,12 @@ export default function HomePage() {
   const isCurrentAd = current !== null && "isAd" in current && (current as Ad).isAd === true;
 
   function toCard(item: Clothing): CardData {
+    const photos = getPhotos(item);
     return {
       id: String(item.id),
-      photo: item.image_url ?? "/card-photo-01.png",
+      photo: photos[photoIdx] ?? photos[0] ?? "/card-photo-01.png",
+      photoCount: photos.length,
+      photoIdx: photoIdx,
       title: item.title ?? "Item",
       location: item.location ?? "Brussels",
       username: item.profiles?.username ?? "user",
@@ -171,9 +267,17 @@ export default function HomePage() {
   }
 
   function advance() {
+    // Marquer l'item courant comme vu
+    if (current && !isCurrentAd) {
+      const seenStr = sessionStorage.getItem("trade_seen_ids") ?? "";
+      const seenIds = new Set(seenStr.split(",").filter(Boolean));
+      seenIds.add(String((current as Clothing).id));
+      sessionStorage.setItem("trade_seen_ids", [...seenIds].join(","));
+    }
     setExitDir(null);
     setDragX(0); dragXRef.current = 0;
     setSaved(false);
+    setPhotoIdx(0);
     setCurrentIndex((i) => i + 1);
   }
 
@@ -279,23 +383,43 @@ export default function HomePage() {
     }
     if (dx > 60) decide("right");
     else if (dx < -60) decide("left");
-    else { setDragX(0); dragXRef.current = 0; }
+    else {
+      setDragX(0); dragXRef.current = 0;
+      // Tap (mouvement < 8px) → cycler la photo suivante
+      if (!isCurrentAd && Math.abs(dx) < 8 && Math.abs(dy) < 8 && current) {
+        const photos = getPhotos(current as Clothing);
+        if (photos.length > 1) setPhotoIdx(i => (i + 1) % photos.length);
+      }
+    }
   }
 
   const overlayLike = exitDir === "right" ? 1 : Math.max(0, Math.min(1, dragX / 100));
   const overlaySkip = exitDir === "left" ? 1 : Math.max(0, Math.min(1, -dragX / 100));
 
+  if (isBanned) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100dvh", background: "#1a1a1a", flexDirection: "column", padding: 32, textAlign: "center", fontFamily: FONT }}>
+        <span style={{ fontSize: 48 }}>🚫</span>
+        <h2 style={{ color: "#fff", marginTop: 16, marginBottom: 8 }}>Account suspended</h2>
+        <p style={{ color: "#aaa", lineHeight: 1.6, maxWidth: 300 }}>Your account has been suspended for violating TRADE&apos;s terms of service. Contact us at tradebrussel@gmail.com if you think this is a mistake.</p>
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
-        position: "relative",
+        position: "fixed",
+        top: 0,
+        left: "50%",
+        transform: "translateX(-50%)",
         width: "100%",
-        height: "100dvh",
         maxWidth: 480,
-        margin: "0 auto",
+        height: "100dvh",
         background: "#f9f4e8",
         fontFamily: FONT,
         overflow: "hidden",
+        animation: "homeEntry 0.22s ease-out both",
       }}
     >
       {/* ===== HEADER ===== */}
@@ -313,6 +437,8 @@ export default function HomePage() {
           paddingBottom: 14,
           height: "calc(68px + max(env(safe-area-inset-top), 44px))",
           zIndex: 20,
+          maxWidth: 480,
+          width: "100%",
         }}
       >
         <div style={{ position: "relative", width: 160, height: 48 }}>
@@ -333,9 +459,9 @@ export default function HomePage() {
       <div
         style={{
           position: "absolute",
-          top: "calc(56px + max(env(safe-area-inset-top), 44px))",
+          top: "50%",
           left: "50%",
-          transform: "translateX(-50%)",
+          transform: "translate(-50%, -50%)",
           width: 460, height: 310,
           zIndex: 2, pointerEvents: "none", opacity: 0.85,
         }}
@@ -356,9 +482,15 @@ export default function HomePage() {
         }}
       >
         {loading ? (
-          <div style={{ width: "100%", height: "100%", borderRadius: 30, background: "#ede7d9", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <span style={{ color: "#3c2f22", fontWeight: 600, opacity: 0.5 }}>Loading…</span>
-          </div>
+          loadError ? (
+            <div style={{ width: "100%", height: "100%", borderRadius: 30, background: "#ede7d9", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}>
+              <span style={{ fontSize: 32 }}>⚠️</span>
+              <span style={{ color: "#3c2f22", fontWeight: 700, fontSize: 15 }}>Connection error</span>
+              <button onClick={() => window.location.reload()} style={{ marginTop: 4, height: 44, padding: "0 20px", borderRadius: 22, background: "#FFC543", border: "none", fontWeight: 800, color: "#2D1A0A", cursor: "pointer" }}>Retry</button>
+            </div>
+          ) : (
+            <div className="skeleton" style={{ width: "100%", height: "100%", borderRadius: 30 }} />
+          )
         ) : current ? (
           <div
             onTouchStart={(e) => { e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }}
@@ -373,7 +505,7 @@ export default function HomePage() {
               cursor: dragging ? "grabbing" : "grab", touchAction: "none",
               userSelect: "none",
               transform: exitDir
-                ? `translateX(${exitDir === "right" ? "150%" : "-150%"}) rotate(${exitDir === "right" ? 8 : -8}deg)`
+                ? `translateX(${exitDir === "right" ? "110vw" : "-110vw"}) rotate(${exitDir === "right" ? 15 : -15}deg)`
                 : `translateX(${dragX}px) rotate(${Math.max(-8, Math.min(8, dragX * 0.05))}deg)`,
               opacity: exitDir ? 0 : 1,
               transition: exitDir
@@ -394,6 +526,12 @@ export default function HomePage() {
                 <div style={{ ...overlayBase, background: "rgba(217,64,64,0.45)", opacity: overlaySkip }}>
                   <span style={overlayBadge("#d94040", "14deg")}>SKIP ✗</span>
                 </div>
+                {/* Featured badge */}
+                {(current as Clothing).featured && (
+                  <div style={{ position: "absolute", top: 14, left: 14, zIndex: 7, pointerEvents: "none" }}>
+                    <span style={{ background: "#FFC543", color: "#2D1A0A", fontWeight: 800, fontSize: 11, padding: "4px 10px", borderRadius: 16, boxShadow: "0 2px 8px rgba(255,197,67,0.5)" }}>⭐ Featured</span>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -544,7 +682,7 @@ export function ProposalSheet({ target, myItems, available, toCard, onCancel, on
       position: "fixed", inset: 0, zIndex: 90, background: "#f9f4e8",
       maxWidth: 480, margin: "0 auto",
       display: "flex", flexDirection: "column",
-      animation: "page-fade-in 0.25s ease both",
+      animation: "sheetSlideUp 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both",
     }}>
       {/* Header */}
       <div style={{ background: "#3c2f22", paddingTop: "max(16px, calc(env(safe-area-inset-top, 0px) + 8px))", paddingRight: 20, paddingBottom: 18, paddingLeft: 20, borderBottomLeftRadius: 24, borderBottomRightRadius: 24, display: "flex", alignItems: "center", gap: 12 }}>
@@ -630,6 +768,7 @@ export function ProposalSheet({ target, myItems, available, toCard, onCancel, on
       {myItems.length > 0 && (
         <div style={{ padding: "12px 20px 24px", borderTop: "1px solid rgba(45,26,10,0.08)" }}>
           <button
+            className="btn-cta"
             onClick={() => selected && onSend(selected, coins)}
             disabled={!selected}
             style={{
@@ -683,11 +822,12 @@ function MatchPopup({ data, onClose, onMessage }: {
         position: "fixed", inset: 0, zIndex: 100,
         background: "rgba(20,12,4,0.6)",
         display: "flex", alignItems: "center", justifyContent: "center", padding: 24,
+        animation: "backdropFade 0.22s ease both",
       }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{ background: "#fff", borderRadius: 24, padding: 32, textAlign: "center", width: "100%", maxWidth: 340 }}
+        style={{ background: "#fff", borderRadius: 24, padding: 32, textAlign: "center", width: "100%", maxWidth: 340, animation: "matchCardIn 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both" }}
       >
         <p style={{ fontSize: 28, fontWeight: 800, color: "#2D1A0A", margin: "0 0 20px" }}>🎉 It&apos;s a Match!</p>
         <div style={{ display: "flex", justifyContent: "center", gap: 14, marginBottom: 24 }}>
@@ -695,12 +835,14 @@ function MatchPopup({ data, onClose, onMessage }: {
           <img src={data.theirPhoto} alt="" style={{ width: 80, height: 80, borderRadius: 12, objectFit: "cover" }} />
         </div>
         <button
+          className="btn-cta"
           onClick={onMessage}
           style={{ width: "100%", height: 52, borderRadius: 26, background: "#FFC543", color: "#2D1A0A", border: "none", fontWeight: 800, fontSize: 16, cursor: "pointer", marginBottom: 12 }}
         >
           Send a message
         </button>
         <button
+          className="btn-cta"
           onClick={onClose}
           style={{ width: "100%", height: 52, borderRadius: 26, background: "transparent", color: "#2D1A0A", border: "2px solid #2D1A0A", fontWeight: 700, fontSize: 16, cursor: "pointer" }}
         >

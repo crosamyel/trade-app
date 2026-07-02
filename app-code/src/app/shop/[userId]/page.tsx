@@ -164,7 +164,7 @@ export default function ShopPage() {
         {/* Avatar */}
         <div style={{ width: 84, height: 84, borderRadius: "50%", background: "#FFC543", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", border: "3px solid rgba(255,255,255,0.2)", marginBottom: 14 }}>
           {profile.avatar_url
-            ? <img src={profile.avatar_url} style={{ width: "100%", height: "100%", objectFit: "cover" }} alt="" />
+            ? <img src={profile.avatar_url} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} alt="" />
             : <span style={{ fontSize: 36, fontWeight: 800, fontStyle: "italic", color: "#3c2f22" }}>{initial}</span>
           }
         </div>
@@ -251,7 +251,7 @@ export default function ShopPage() {
                 style={{ textAlign: "left", padding: 0, border: "none", background: "#fff", borderRadius: 18, overflow: "hidden", cursor: "pointer", boxShadow: "0 3px 10px rgba(0,0,0,0.06)" }}
               >
                 <div style={{ position: "relative", width: "100%", aspectRatio: "4 / 5", background: "#ece6d8" }}>
-                  {it.image_url && <img src={it.image_url} alt={it.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                  {it.image_url && <img src={it.image_url} alt={it.title} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
                 </div>
                 <div style={{ padding: "10px 10px 12px" }}>
                   <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#2D1A0A", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.title ?? "Item"}</p>
