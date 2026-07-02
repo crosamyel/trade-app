@@ -128,17 +128,21 @@ export default function AdminPage() {
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from("profiles")
-      .select("id, username, full_name, account_type, city, coins_balance, created_at, banned, verified_badge")
-      .order("created_at", { ascending: false });
-    if (!data) { setLoading(false); return; }
-    const ids = data.map(p => p.id);
-    const itemCounts: Record<string, number> = {};
-    if (ids.length > 0) {
-      const { data: c } = await supabase.from("clothing").select("user_id").in("user_id", ids);
-      for (const r of c ?? []) itemCounts[r.user_id] = (itemCounts[r.user_id] ?? 0) + 1;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/admin/users", {
+        headers: { "Authorization": `Bearer ${session?.access_token}` },
+      });
+      const json = await res.json();
+      console.log("[admin/users] status:", res.status, "body:", JSON.stringify(json));
+      if (res.ok && json.users) {
+        setUsers(json.users as UserProfile[]);
+      } else {
+        console.error("[admin/users] error:", json.error ?? "unknown");
+      }
+    } catch (e) {
+      console.error("[admin/users] fetch failed:", e);
     }
-    setUsers(data.map(p => ({ ...p, item_count: itemCounts[p.id] ?? 0 })) as UserProfile[]);
     setLoading(false);
   }, []);
 
@@ -219,6 +223,25 @@ export default function AdminPage() {
   async function banUser(id: string, current: boolean) {
     await supabase.from("profiles").update({ banned: !current }).eq("id", id);
     setUsers(prev => prev.map(u => u.id === id ? { ...u, banned: !current } : u));
+  }
+  async function deleteUser(id: string, username: string) {
+    if (!confirm(`⚠️ Delete @${username}? This will permanently remove their account, all items, matches and messages. This cannot be undone.`)) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/admin/delete-user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ userId: id }),
+      });
+      const data = await res.json();
+      if (!res.ok) { alert("Error: " + data.error); return; }
+      setUsers(prev => prev.filter(u => u.id !== id));
+    } catch (err) {
+      alert("Delete failed — try again");
+    }
   }
   async function verifyUser(id: string, current: boolean) {
     await supabase.from("profiles").update({ verified_badge: !current }).eq("id", id);
@@ -474,6 +497,9 @@ export default function AdminPage() {
                       </button>
                       <button onClick={() => loadUserStats(u)} style={{ height: 28, padding: "0 12px", borderRadius: 14, border: "none", background: "rgba(107,33,168,0.25)", color: "#a855f7", fontWeight: 700, fontSize: 11, cursor: "pointer" }}>
                         👑 Stats
+                      </button>
+                      <button onClick={() => deleteUser(u.id, u.username ?? u.id)} style={{ height: 28, padding: "0 12px", borderRadius: 14, border: "1.5px solid rgba(224,60,60,0.4)", background: "rgba(224,60,60,0.1)", color: "#e03c3c", fontWeight: 700, fontSize: 11, cursor: "pointer" }}>
+                        🗑 Delete
                       </button>
                     </div>
                   </div>
