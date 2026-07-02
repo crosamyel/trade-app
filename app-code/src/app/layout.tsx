@@ -4,6 +4,7 @@ import "./globals.css";
 import { BottomNav } from "@/components/BottomNav";
 import { PageTransition } from "@/components/PageTransition";
 import { SafeAreaBar } from "@/components/SafeAreaBar";
+import { PushSetup } from "@/components/PushSetup";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -64,6 +65,8 @@ export default function RootLayout({
         </div>
         {/* Nav persistante : reste montée entre les pages → la boule peut s'animer */}
         <BottomNav />
+        {/* Push notifications setup (invisible — demande permission après 3s) */}
+        <PushSetup />
       </body>
     </html>
   );

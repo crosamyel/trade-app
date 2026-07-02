@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { SwipeCard, CardData } from "@/components/SwipeCard";
 import { HeaderActions } from "@/components/HeaderActions";
 import { supabase } from "@/lib/supabase";
+import { usePushNotifications } from "@/lib/usePushNotifications";
 
 const FONT = "'Helvetica Neue', Helvetica, Arial, sans-serif";
 
@@ -60,16 +61,28 @@ function scoreClothing(item: Clothing, myCity: string, prefStyles: string[], pre
   return score;
 }
 
-async function notifyUser(userId: string | null | undefined, type: string, body: string, link: string) {
+async function notifyUser(userId: string | null | undefined, type: string, body: string, link: string, title?: string) {
   if (!userId) return;
+  // 1. Notification in-app (Supabase)
   try {
     await supabase.from("notifications").insert({ user_id: userId, type, body, read: false, link });
   } catch { /* notifications table may not exist yet */ }
+  // 2. Push browser
+  try {
+    await fetch("/api/push/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, title: title ?? "TRADE", body, url: link }),
+    });
+  } catch { /* push optional */ }
 }
 
 export default function HomePage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<{ id: string } | null>(null);
+
+  // Enregistrement push notifications (demande permission après 3s)
+  usePushNotifications(currentUser?.id);
   const [isBanned, setIsBanned] = useState(false);
   const [stack, setStack] = useState<Clothing[]>([]);
   const [myItems, setMyItems] = useState<Clothing[]>([]);
@@ -311,13 +324,36 @@ export default function HomePage() {
           clothing_a_id: matchCheck[0].clothing_id,
           clothing_b_id: item.id,
         });
-        await notifyUser(item.user_id, "match", "🎉 New match! Someone loves your item — check your messages.", "/matches");
+        // Notif match pour les deux utilisateurs
+        await notifyUser(
+          item.user_id,
+          "match",
+          `Someone wants to trade with you — go check your matches!`,
+          "/matches",
+          "🎉 New match on TRADE!"
+        );
+        await notifyUser(
+          currentUser.id,
+          "match",
+          `Your proposal was matched! Check your messages to start the trade.`,
+          "/matches",
+          "🎉 New match on TRADE!"
+        );
         setMatchData({
           myPhoto: myItem.image_url ?? "/card-photo-01.png",
           theirPhoto: item.image_url ?? "/card-photo-01.png",
           theirUserId: item.user_id,
         });
         setShowMatchPopup(true);
+      } else {
+        // Pas de match (encore) — notif "like reçu" pour le proprio de l'item
+        await notifyUser(
+          item.user_id,
+          "like",
+          `Someone likes your ${item.title ?? "item"} and wants to trade!`,
+          "/matches",
+          "❤️ New like on TRADE"
+        );
       }
     } catch (e) {
       console.error("like/match error:", e);

@@ -24,11 +24,20 @@ type TradeAddress = {
   city?: string; postal_code?: string; country?: string;
 };
 
-async function notify(userId: string | null | undefined, type: string, body: string, link: string) {
+async function notify(userId: string | null | undefined, type: string, body: string, link: string, title?: string) {
   if (!userId) return;
+  // 1. In-app notification
   try {
     await supabase.from("notifications").insert({ user_id: userId, type, body, read: false, link });
   } catch { /* notifications table may not exist yet */ }
+  // 2. Push browser
+  try {
+    await fetch("/api/push/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, title: title ?? "TRADE", body, url: link }),
+    });
+  } catch { /* push optional */ }
 }
 
 export default function ChatPage() {
@@ -181,6 +190,16 @@ export default function ChatPage() {
     if (!text || !me) return;
     setInput("");
     await supabase.from("messages").insert({ match_id: matchId, sender_id: me, body: text });
+    // Push notification au destinataire
+    if (otherId) {
+      await notify(
+        otherId,
+        "message",
+        `${otherName !== "Chat" ? "You have" : "You have"} a new message: "${text.length > 60 ? text.slice(0, 57) + "…" : text}"`,
+        `/chat/${matchId}`,
+        `💬 New message on TRADE`
+      );
+    }
   }
 
   async function openProposal() {
