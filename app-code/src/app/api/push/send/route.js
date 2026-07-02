@@ -10,13 +10,16 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-webpush.setVapidDetails(
-  "mailto:noreply@tradebe.app",
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
-  process.env.VAPID_PRIVATE_KEY
-);
-
 export async function POST(request) {
+  // Initialise VAPID ici (pas au module level) pour éviter un crash si les env vars
+  // ne sont pas encore configurées dans Vercel
+  const vapidPublic = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  const vapidPrivate = process.env.VAPID_PRIVATE_KEY;
+  if (!vapidPublic || !vapidPrivate) {
+    console.warn("[push/send] VAPID keys not configured — skipping push");
+    return Response.json({ ok: true, sent: 0, warn: "VAPID not configured" });
+  }
+  webpush.setVapidDetails("mailto:noreply@tradebe.app", vapidPublic, vapidPrivate);
   try {
     const { userId, title, body, url = "/" } = await request.json();
     if (!userId) return Response.json({ error: "Missing userId" }, { status: 400 });

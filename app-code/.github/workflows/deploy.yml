@@ -15,6 +15,7 @@ jobs:
         run: npm install -g vercel@latest
 
       - name: Deploy to Production
+        working-directory: ./app-code
         run: vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }}
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
