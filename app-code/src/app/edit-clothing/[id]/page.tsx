@@ -295,7 +295,7 @@ export default function EditClothingPage() {
             {/* Explication du calcul */}
             <p style={{ margin: "8px 0 0", fontSize: 11, color: "#9a7d3a", lineHeight: 1.4 }}>
               💡 {brand && condition
-                ? `${category || "Item"} (base) × ${brand} × ${condition} = ${coinsSuggested} coins suggérés`
+                ? `${style || "Item"} (base) × ${brand} × ${condition} = ${coinsSuggested} coins suggérés`
                 : "Valeur calculée par TRADE selon la marque, la catégorie et l'état"}
             </p>
             {coinsValue !== coinsSuggested && (
