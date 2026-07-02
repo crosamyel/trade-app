@@ -459,7 +459,23 @@ export default function ChatPage() {
         {messages.map((m) => {
           const mine = m.sender_id === me;
           const isProposal = m.body.startsWith("🔄 Trade proposal:");
-          const isSystem = m.body.startsWith("✅ Trade accepted") || m.body.startsWith("❌ Proposal") || m.body.startsWith("📦 Both items") || m.body.startsWith("⚠️ A problem");
+          const isSystem = m.body.startsWith("✅ Trade accepted") || m.body.startsWith("❌ Proposal") || m.body.startsWith("📦 Both items") || m.body.startsWith("⚠️ A problem") || m.body.startsWith("⚠️ SYSTEM:");
+          const isItemRemoved = m.body.startsWith("⚠️ SYSTEM:");
+
+          if (isItemRemoved) {
+            return (
+              <div key={String(m.id)} style={{ textAlign: "center", padding: "8px 12px" }}>
+                <div style={{
+                  display: "inline-block", background: "#fdecea", border: "1.5px solid #e03c3c",
+                  borderRadius: 14, padding: "10px 16px", maxWidth: "90%",
+                }}>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#c0392b", lineHeight: 1.4 }}>
+                    🚫 This user has removed one of the items involved in this trade. The trade can no longer proceed.
+                  </p>
+                </div>
+              </div>
+            );
+          }
 
           if (isSystem) {
             return (

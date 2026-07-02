@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -48,17 +48,10 @@ export default function EditClothingPage() {
   const [coinsValue, setCoinsValue] = useState<number>(20);
   const [coinsSuggested, setCoinsSuggested] = useState<number>(20);
 
-  // Photos (URL existante ou nouveau dataUrl)
+  // Photos — read-only après upload (non modifiables ici)
   const [frontPhoto, setFrontPhoto] = useState<string | null>(null);
   const [backPhoto, setBackPhoto] = useState<string | null>(null);
   const [labelPhoto, setLabelPhoto] = useState<string | null>(null);
-  const [newFrontDataUrl, setNewFrontDataUrl] = useState<string | null>(null);
-  const [newBackDataUrl, setNewBackDataUrl] = useState<string | null>(null);
-  const [newLabelDataUrl, setNewLabelDataUrl] = useState<string | null>(null);
-
-  const frontRef = useRef<HTMLInputElement>(null);
-  const backRef = useRef<HTMLInputElement>(null);
-  const labelRef = useRef<HTMLInputElement>(null);
 
   const [userId, setUserId] = useState<string | null>(null);
 
@@ -92,59 +85,12 @@ export default function EditClothingPage() {
     init();
   }, [id, router]);
 
-  function pickFile(ref: React.RefObject<HTMLInputElement | null>, onPick: (url: string) => void) {
-    if (!ref.current) return;
-    ref.current.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => onPick(reader.result as string);
-      reader.readAsDataURL(file);
-      (e.target as HTMLInputElement).value = "";
-    };
-    ref.current.click();
-  }
-
-  async function uploadDataUrl(dataUrl: string, slot: string): Promise<string | null> {
-    if (!userId) return null;
-    const [header, base64] = dataUrl.split(",");
-    const mimeType = header.match(/:(.*?);/)?.[1] ?? "image/jpeg";
-    const ext = mimeType.split("/")[1] ?? "jpg";
-    const path = `${userId}/${Date.now()}_${slot}.${ext}`;
-    const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-    const blob = new Blob([bytes], { type: mimeType });
-    const { error: upErr } = await supabase.storage.from("clothing-images").upload(path, blob, { contentType: mimeType, upsert: true });
-    if (upErr) { console.error("upload error:", upErr); return null; }
-    const { data } = supabase.storage.from("clothing-images").getPublicUrl(path);
-    return data.publicUrl;
-  }
-
   async function handleSave() {
     if (saving) return;
     if (!title.trim()) { setError("Title is required."); return; }
     setSaving(true);
     setError("");
-
     try {
-      // Upload des nouvelles photos si présentes
-      let frontUrl = frontPhoto;
-      let backUrl = backPhoto;
-      let labelUrl = labelPhoto;
-
-      if (newFrontDataUrl) {
-        const url = await uploadDataUrl(newFrontDataUrl, "front");
-        if (!url) { setError("Front photo upload failed."); setSaving(false); return; }
-        frontUrl = url;
-      }
-      if (newBackDataUrl) {
-        const url = await uploadDataUrl(newBackDataUrl, "back");
-        if (url) backUrl = url;
-      }
-      if (newLabelDataUrl) {
-        const url = await uploadDataUrl(newLabelDataUrl, "label");
-        if (url) labelUrl = url;
-      }
-
       const { error: dbErr } = await supabase.from("clothing").update({
         title: title.trim(),
         brand: brand.trim() || null,
@@ -153,13 +99,8 @@ export default function EditClothingPage() {
         style: style || null,
         description: description.trim() || null,
         coins_value: coinsValue,
-        image_url: frontUrl,
-        image_back_url: backUrl,
-        image_label_url: labelUrl,
       }).eq("id", id);
-
       if (dbErr) { setError("Save failed: " + dbErr.message); setSaving(false); return; }
-
       setSuccess(true);
       setTimeout(() => { window.location.href = "/profile"; }, 1200);
     } catch (e) {
@@ -170,9 +111,37 @@ export default function EditClothingPage() {
   }
 
   async function handleDelete() {
-    if (!confirm("Delete this item? This cannot be undone.")) return;
-    await supabase.from("clothing").update({ status: "archived" }).eq("id", id);
-    window.location.href = "/profile";
+    if (!confirm("Remove this item? This cannot be undone.")) return;
+    try {
+      // 1. Trouver tous les matches impliquant cet article
+      const { data: matches } = await supabase
+        .from("matches")
+        .select("id, user_a_uid, user_b_uid")
+        .or(`clothing_a_id.eq.${id},clothing_b_id.eq.${id}`);
+
+      // 2. Insérer un message système dans chaque chat actif
+      if (matches && matches.length > 0) {
+        for (const match of matches) {
+          await supabase.from("messages").insert({
+            match_id: match.id,
+            sender_id: userId,
+            body: "⚠️ SYSTEM: This user has removed one of the items involved in this trade. The trade can no longer proceed.",
+          });
+        }
+      }
+
+      // 3. Supprimer les likes liés à cet article
+      await supabase.from("likes").delete()
+        .or(`clothing_id.eq.${id},offered_clothing_id.eq.${id}`);
+
+      // 4. Supprimer l'article définitivement
+      await supabase.from("clothing").delete().eq("id", id);
+
+      window.location.href = "/profile";
+    } catch (e) {
+      console.error("Delete error:", e);
+      alert("Failed to remove item. Please try again.");
+    }
   }
 
   if (loading) return (
@@ -180,10 +149,6 @@ export default function EditClothingPage() {
       <span style={{ color: "#3c2f22", opacity: 0.5, fontWeight: 600 }}>Loading…</span>
     </div>
   );
-
-  const displayFront = newFrontDataUrl ?? frontPhoto;
-  const displayBack = newBackDataUrl ?? backPhoto;
-  const displayLabel = newLabelDataUrl ?? labelPhoto;
 
   return (
     <div style={{ position: "relative", width: "100%", minHeight: "100dvh", background: "#f9f4e8", fontFamily: FONT }}>
@@ -210,38 +175,28 @@ export default function EditClothingPage() {
           Edit article
         </h1>
 
-        {/* Photos */}
+        {/* Photos — read-only */}
         <p style={{ fontSize: 13, fontWeight: 700, color: "#7a6f5d", marginBottom: 10 }}>Photos</p>
         <div style={{ display: "flex", gap: 10, marginBottom: 24 }}>
           {[
-            { label: "Front", src: displayFront, ref: frontRef, onNew: setNewFrontDataUrl },
-            { label: "Back", src: displayBack, ref: backRef, onNew: setNewBackDataUrl },
-            { label: "Label", src: displayLabel, ref: labelRef, onNew: setNewLabelDataUrl },
-          ].map(({ label, src, ref, onNew }) => (
-            <div key={label} style={{ flex: 1, position: "relative" }}>
-              <button
-                onClick={() => pickFile(ref, onNew)}
-                style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: 14, overflow: "hidden", border: "2px dashed #b89b6e", background: "#3c2f22", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}
-              >
+            { label: "Front", src: frontPhoto },
+            { label: "Back", src: backPhoto },
+            { label: "Label", src: labelPhoto },
+          ].map(({ label, src }) => (
+            <div key={label} style={{ flex: 1 }}>
+              <div style={{
+                width: "100%", aspectRatio: "1 / 1", borderRadius: 14, overflow: "hidden",
+                background: "#3c2f22", display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
                 {src
                   ? <img src={src} alt={label} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  : <svg width="28" height="28" viewBox="0 0 56 56" fill="none"><rect x="6" y="16" width="44" height="30" rx="6" stroke="rgba(255,255,255,0.4)" strokeWidth="3" /><circle cx="28" cy="31" r="8" stroke="rgba(255,255,255,0.4)" strokeWidth="3" /></svg>
+                  : <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>—</span>
                 }
-                {src && (
-                  <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.25)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: "rgba(0,0,0,0.5)", padding: "3px 8px", borderRadius: 10 }}>Change</span>
-                  </div>
-                )}
-              </button>
+              </div>
               <p style={{ margin: "4px 0 0", textAlign: "center", fontSize: 11, color: "#9b8f7a", fontWeight: 600 }}>{label}</p>
             </div>
           ))}
         </div>
-
-        {/* Inputs cachés */}
-        <input ref={frontRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} />
-        <input ref={backRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} />
-        <input ref={labelRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} />
 
         {/* Champs texte */}
         <TextField label="Title *" value={title} onChange={setTitle} placeholder="e.g. Black hoodie" />
