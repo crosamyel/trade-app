@@ -79,14 +79,14 @@ export default function InstallPage() {
             active={activeStep === 2}
             icon="⬆️"
             title='Appuie sur "Partager"'
-            desc='Dans le menu qui s\'ouvre, trouve et appuie sur "Partager" (icône carré avec flèche)'
+            desc={"Dans le menu qui s'ouvre, trouve et appuie sur \"Partager\" (icône carré avec flèche)"}
           />
           <Step
             num={4}
             active={activeStep === 3}
             icon="＋"
-            title='"Sur l\'écran d\'accueil" → Ajouter'
-            desc='Fais défiler vers le bas et appuie sur "Sur l\'écran d\'accueil", puis "Ajouter"'
+            title={"\"Sur l'écran d'accueil\" → Ajouter"}
+            desc={"Fais défiler vers le bas et appuie sur \"Sur l'écran d'accueil\", puis \"Ajouter\""}
           />
         </div>
 
