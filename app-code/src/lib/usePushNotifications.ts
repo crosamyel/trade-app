@@ -48,7 +48,7 @@ export function usePushNotifications(userId: string | null | undefined) {
           existing ??
           (await reg.pushManager.subscribe({
             userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(vapidKey),
+            applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
           }));
 
         // 4. Sauvegarder la subscription côté serveur
