@@ -45,6 +45,7 @@ export default function EditClothingPage() {
   const [condition, setCondition] = useState("");
   const [style, setStyle] = useState("");
   const [description, setDescription] = useState("");
+  const [coinsValue, setCoinsValue] = useState<number>(20);
 
   // Photos (URL existante ou nouveau dataUrl)
   const [frontPhoto, setFrontPhoto] = useState<string | null>(null);
@@ -79,6 +80,7 @@ export default function EditClothingPage() {
       setCondition(item.condition ?? "");
       setStyle(item.style ?? "");
       setDescription(item.description ?? "");
+      setCoinsValue(item.coins_value ?? calcCoins(item.condition ?? "", item.brand ?? "", item.title ?? ""));
       setFrontPhoto(item.image_url ?? null);
       setBackPhoto(item.image_back_url ?? null);
       setLabelPhoto(item.image_label_url ?? null);
@@ -147,6 +149,7 @@ export default function EditClothingPage() {
         condition: condition || null,
         style: style || null,
         description: description.trim() || null,
+        coins_value: coinsValue,
         image_url: frontUrl,
         image_back_url: backUrl,
         image_label_url: labelUrl,
@@ -155,7 +158,7 @@ export default function EditClothingPage() {
       if (dbErr) { setError("Save failed: " + dbErr.message); setSaving(false); return; }
 
       setSuccess(true);
-      setTimeout(() => router.push("/profile"), 1200);
+      setTimeout(() => { window.location.href = "/profile"; }, 1200);
     } catch (e) {
       console.error(e);
       setError("Unexpected error.");
@@ -166,7 +169,7 @@ export default function EditClothingPage() {
   async function handleDelete() {
     if (!confirm("Delete this item? This cannot be undone.")) return;
     await supabase.from("clothing").update({ status: "archived" }).eq("id", id);
-    router.push("/profile");
+    window.location.href = "/profile";
   }
 
   if (loading) return (
@@ -262,6 +265,37 @@ export default function EditClothingPage() {
           />
         </div>
 
+        {/* Coins value */}
+        <div style={{ marginBottom: 18 }}>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "#7a6f5d", marginBottom: 6 }}>
+            Coins value
+            <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: "#b3a896" }}>— what this item is worth in trades</span>
+          </label>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, background: "#f0e2b8", borderRadius: 18, padding: "12px 16px" }}>
+            <button
+              onClick={() => setCoinsValue(v => Math.max(5, v - 5))}
+              style={{ width: 36, height: 36, borderRadius: "50%", border: "none", background: "#3c2f22", color: "#FFC543", fontSize: 22, fontWeight: 800, cursor: "pointer", lineHeight: 1, flexShrink: 0 }}
+            >−</button>
+            <input
+              type="number" min={5} max={500}
+              value={coinsValue}
+              onChange={(e) => setCoinsValue(Math.min(500, Math.max(5, Number(e.target.value) || 5)))}
+              style={{ flex: 1, height: 40, background: "#fff", border: "1.5px solid #d4b870", borderRadius: 12, textAlign: "center", fontSize: 20, fontWeight: 800, color: "#8a6d2a", outline: "none", fontFamily: FONT }}
+            />
+            <button
+              onClick={() => setCoinsValue(v => Math.min(500, v + 5))}
+              style={{ width: 36, height: 36, borderRadius: "50%", border: "none", background: "#3c2f22", color: "#FFC543", fontSize: 22, fontWeight: 800, cursor: "pointer", lineHeight: 1, flexShrink: 0 }}
+            >+</button>
+            <span style={{ fontSize: 22, flexShrink: 0 }}>🪙</span>
+          </div>
+          <button
+            onClick={() => setCoinsValue(calcCoins(condition, brand, title))}
+            style={{ marginTop: 6, fontSize: 11, color: "#9b8f7a", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", padding: 0 }}
+          >
+            Recalculate from brand/condition
+          </button>
+        </div>
+
         {/* Erreur / succès */}
         {error && <p style={{ fontSize: 13, color: "#e03c3c", textAlign: "center", marginBottom: 10 }}>{error}</p>}
         {success && <p style={{ fontSize: 14, fontWeight: 700, color: "#5d8f3c", textAlign: "center", marginBottom: 10 }}>Saved ✓</p>}
@@ -300,6 +334,32 @@ function TextField({ label, value, onChange, placeholder }: { label: string; val
       />
     </div>
   );
+}
+
+/* Coins calculation — mirrors the formula in upload pages */
+function calcCoins(condition: string, brand: string, category: string): number {
+  const cat = (category ?? "").toLowerCase();
+  let base = 20;
+  if (cat.includes("outerwear") || cat.includes("jacket") || cat.includes("coat")) base = 40;
+  else if (cat.includes("shoes") || cat.includes("sneakers") || cat.includes("boots")) base = 35;
+  else if (cat.includes("dress")) base = 30;
+  else if (cat.includes("bottom") || cat.includes("jeans") || cat.includes("pant")) base = 25;
+  else if (cat.includes("sport")) base = 25;
+  else if (cat.includes("accessori") || cat.includes("bag") || cat.includes("belt")) base = 20;
+  const b = (brand ?? "").toLowerCase();
+  let bm = 1.0;
+  if (["gucci","louis vuitton","lv","prada","balenciaga","off-white","dior","versace","moncler","ysl","saint laurent","bottega","fendi"].some(l => b.includes(l))) bm = 4.0;
+  else if (["ralph lauren","tommy hilfiger","calvin klein","hugo boss","lacoste","burberry","armani","boss"].some(p => b.includes(p))) bm = 2.5;
+  else if (["nike","adidas","zara","h&m","levi","north face","stone island","carhartt","new balance","puma","reebok","jordan","converse","vans","champion"].some(p => b.includes(p))) bm = 1.8;
+  else if (["primark","shein","boohoo","forever 21","asos","prettylittlething","missguided"].some(f => b.includes(f))) bm = 0.8;
+  const c = (condition ?? "").toLowerCase();
+  let cm = 1.0;
+  if (c === "new") cm = 2.0;
+  else if (c === "like_new" || c === "like new") cm = 1.6;
+  else if (c === "good") cm = 1.2;
+  else if (c === "used") cm = 0.8;
+  else if (c === "worn") cm = 0.5;
+  return Math.min(500, Math.max(5, Math.round(base * bm * cm)));
 }
 
 function ChipField({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: string[] }) {

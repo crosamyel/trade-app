@@ -18,7 +18,7 @@ const ROUTES: Record<NavId, string> = {
 
 /* La nav n'apparaît QUE sur ces pages */
 const SHOW_ON = ["/home", "/search", "/matches", "/profile", "/upload"];
-const HIDE_ON = ["/profile/edit"];
+const HIDE_ON = ["/profile/edit", "/upload/multi"];
 
 function activeFromPath(path: string): NavId | null {
   if (path.startsWith("/upload")) return "plus";

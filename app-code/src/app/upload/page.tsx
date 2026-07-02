@@ -537,7 +537,8 @@ function StepVerify({ photos, analysis, setAnalysis }: {
 
   const coinsValue = analysis.coins_value ?? calculateCoins(analysis.condition, analysis.brand, analysis.category);
 
-  const canSubmit = !!photos.front && !!photos.back && !!photos.label;
+  // Only front photo is required — back/label are optional but help AI analysis
+  const canSubmit = !!photos.front;
 
   async function uploadDataUrl(dataUrl: string, userId: string, slot: string): Promise<string | null> {
     const [header, base64] = dataUrl.split(",");
@@ -701,7 +702,7 @@ function StepVerify({ photos, analysis, setAnalysis }: {
       </button>
       {!canSubmit && (
         <p style={{ fontSize: 12, color: "#b3a896", textAlign: "center", margin: "10px 0 0" }}>
-          Front, back and label required
+          At least a front photo is required
         </p>
       )}
     </div>

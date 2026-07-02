@@ -1,15 +1,25 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 const FONT = "'Helvetica Neue', Helvetica, Arial, sans-serif";
 
-type ItemResult = {
+type PhotoGroup = {
   id: number;
-  photoDataUrl: string;
+  /** Indices into rawPhotos[] that belong to this group */
+  photoIndices: number[];
+  /** Index within photoIndices pointing to the front photo */
+  frontSubIdx: number;
+  /** Index within photoIndices pointing to the label photo, or null */
+  labelSubIdx: number | null;
+  /** Which photo within photoIndices is currently displayed large */
+  activeSubIdx: number;
+  /** Analysis state */
+  analyzing: boolean;
+  analyzed: boolean;
   category: string;
   brand: string;
   size: string;
@@ -18,275 +28,692 @@ type ItemResult = {
   style: string;
   description: string;
   coins_value: number | null;
-  analyzing: boolean;
   error: string;
 };
 
+/* ─────────────────────────────────────────────────────────────────── */
 export default function MultiUploadPage() {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const [phase, setPhase] = useState<"pick" | "review" | "publishing">("pick");
-  const [items, setItems] = useState<ItemResult[]>([]);
+  const [phase, setPhase] = useState<"pick" | "grouping" | "review" | "publishing">("pick");
+  const [rawPhotos, setRawPhotos] = useState<string[]>([]);
+  const [groupingStatus, setGroupingStatus] = useState("Analysing your photos…");
+  const [groups, setGroups] = useState<PhotoGroup[]>([]);
   const [reviewIndex, setReviewIndex] = useState(0);
   const [publishError, setPublishError] = useState("");
-  const [notClothingError, setNotClothingError] = useState(false);
 
-  useEffect(() => {
-    if (phase !== "review") return;
-    if (items.length === 0) { setPhase("pick"); return; }
-    setReviewIndex((prev) => Math.min(prev, items.length - 1));
-  }, [items.length, phase]);
-
-  async function compress(dataUrl: string): Promise<string> {
+  /* ── Helpers ───────────────────────────────────────────────────── */
+  async function compress(dataUrl: string, maxPx = 1024): Promise<string> {
     return new Promise((resolve) => {
       const img = new window.Image();
       img.onload = () => {
-        const MAX = 1024;
         let { width, height } = img;
-        if (width > MAX || height > MAX) {
-          if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
-          else { width = Math.round(width * MAX / height); height = MAX; }
+        if (width > maxPx || height > maxPx) {
+          if (width > height) { height = Math.round(height * maxPx / width); width = maxPx; }
+          else { width = Math.round(width * maxPx / height); height = maxPx; }
         }
-        const canvas = document.createElement("canvas");
-        canvas.width = width; canvas.height = height;
-        canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", 0.82));
+        const c = document.createElement("canvas");
+        c.width = width; c.height = height;
+        c.getContext("2d")!.drawImage(img, 0, 0, width, height);
+        resolve(c.toDataURL("image/jpeg", 0.82));
       };
       img.onerror = () => resolve(dataUrl);
       img.src = dataUrl;
     });
   }
 
-  async function analyzeOne(dataUrl: string): Promise<Partial<ItemResult>> {
-    try {
-      const comp = await compress(dataUrl);
-      const res = await fetch("/api/analyze-clothing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ front: comp }),
-      });
-      const data = await res.json();
-      if (res.status === 422 && data.error === 'not_clothing') return { error: "not_clothing" };
-      if (!res.ok || data.error) return { error: data.reason ?? "Analysis failed" };
-      return {
-        category: data.category ?? "",
-        brand: data.brand ?? "",
-        size: data.size ?? "",
-        color: data.color ?? "",
-        condition: data.condition ?? "",
-        style: data.style ?? "",
-        description: data.description ?? "",
-        coins_value: typeof data.coins_value === "number" ? data.coins_value : null,
-        error: "",
-      };
-    } catch {
-      return { error: "Network error" };
-    }
+  function patchGroup(id: number, patch: Partial<PhotoGroup>) {
+    setGroups((prev) => prev.map((g) => (g.id === id ? { ...g, ...patch } : g)));
   }
 
-  function handleFiles(files: FileList) {
+  /* ── File selection ────────────────────────────────────────────── */
+  async function handleFiles(files: FileList) {
     const list = Array.from(files).slice(0, 12);
-    const initial: ItemResult[] = list.map((_, i) => ({
-      id: i,
-      photoDataUrl: "", category: "", brand: "", size: "", color: "",
-      condition: "", style: "", description: "", coins_value: null, analyzing: true, error: "",
-    }));
-    setItems(initial);
-    setPhase("review");
-    setReviewIndex(0);
+    if (list.length === 0) return;
 
-    list.forEach((file, i) => {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const dataUrl = reader.result as string;
-        const result = await analyzeOne(dataUrl);
-        if (result.error === "not_clothing") {
-          setItems((prev) => prev.filter((item) => item.id !== i));
-          setNotClothingError(true);
+    /* 1. Read all files into data URLs */
+    const dataUrls: string[] = await Promise.all(
+      list.map(
+        (file) =>
+          new Promise<string>((res) => {
+            const r = new FileReader();
+            r.onload = () => res(r.result as string);
+            r.readAsDataURL(file);
+          })
+      )
+    );
+    setRawPhotos(dataUrls);
+    setPhase("grouping");
+    setGroupingStatus("Compressing photos…");
+
+    /* 2. Compress for AI (smaller = faster) */
+    const compressed = await Promise.all(dataUrls.map((u) => compress(u, 768)));
+    setGroupingStatus(`Grouping ${dataUrls.length} photos by item…`);
+
+    /* 3. Call group-photos API */
+    let groupData: { groups: { photos: number[]; front: number; label: number | null }[] };
+    try {
+      const res = await fetch("/api/group-photos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photos: compressed }),
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      groupData = await res.json();
+    } catch {
+      // Fallback: each photo is its own group
+      groupData = { groups: dataUrls.map((_, i) => ({ photos: [i], front: i, label: null })) };
+    }
+
+    /* 4. Build initial group state */
+    const initialGroups: PhotoGroup[] = groupData.groups.map((g, i) => {
+      const frontSubIdx = g.photos.indexOf(g.front);
+      const rawLabelIdx = g.label !== null && g.label !== undefined ? g.photos.indexOf(g.label) : -1;
+      return {
+        id: i,
+        photoIndices: g.photos,
+        frontSubIdx: frontSubIdx >= 0 ? frontSubIdx : 0,
+        labelSubIdx: rawLabelIdx >= 0 ? rawLabelIdx : null,
+        activeSubIdx: 0,
+        analyzing: true, analyzed: false,
+        category: "", brand: "", size: "", color: "",
+        condition: "", style: "", description: "",
+        coins_value: null, error: "",
+      };
+    });
+
+    setGroups(initialGroups);
+    setReviewIndex(0);
+    setPhase("review");
+
+    /* 5. Analyze each group in parallel */
+    groupData.groups.forEach(async (g, i) => {
+      const frontUrl = dataUrls[g.front];
+      const labelUrl = g.label !== null && g.label !== undefined ? dataUrls[g.label] : null;
+
+      const [compFront, compLabel] = await Promise.all([
+        compress(frontUrl),
+        labelUrl ? compress(labelUrl) : Promise.resolve(null),
+      ]);
+
+      try {
+        const res = await fetch("/api/analyze-clothing", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ front: compFront, ...(compLabel ? { label: compLabel } : {}) }),
+        });
+        const data = await res.json();
+
+        if (res.status === 422 && data.error === "not_clothing") {
+          patchGroup(i, { analyzing: false, analyzed: true, error: "Not recognised as clothing — fill in manually." });
           return;
         }
-        setItems((prev) => {
-          const next = [...prev];
-          const idx = next.findIndex((item) => item.id === i);
-          if (idx === -1) return next;
-          next[idx] = { ...next[idx], photoDataUrl: dataUrl, analyzing: false, ...result };
-          return next;
+        if (!res.ok) throw new Error(data.error ?? "Analysis failed");
+
+        patchGroup(i, {
+          analyzing: false, analyzed: true, error: "",
+          category: data.category ?? "", brand: data.brand ?? "",
+          size: data.size ?? "", color: data.color ?? "",
+          condition: data.condition ?? "", style: data.style ?? "",
+          description: data.description ?? "",
+          coins_value: typeof data.coins_value === "number" ? data.coins_value : null,
         });
-      };
-      reader.readAsDataURL(file);
+      } catch {
+        patchGroup(i, { analyzing: false, analyzed: true, error: "Analysis failed — fill in manually." });
+      }
     });
   }
 
-  function updateItem(i: number, patch: Partial<ItemResult>) {
-    setItems((prev) => { const n = [...prev]; n[i] = { ...n[i], ...patch }; return n; });
-  }
-
+  /* ── Publish ───────────────────────────────────────────────────── */
   async function publishAll() {
+    if (groups.some((g) => g.analyzing)) return;
     setPhase("publishing");
     setPublishError("");
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setPublishError("Not logged in."); setPhase("review"); return; }
 
-    for (let idx = 0; idx < items.length; idx++) {
-      const item = items[idx];
-      if (!item.photoDataUrl || item.analyzing) continue;
-      // Upload photo
-      const [header, base64] = item.photoDataUrl.split(",");
+    for (let idx = 0; idx < groups.length; idx++) {
+      const group = groups[idx];
+      const frontPhotoUrl = rawPhotos[group.photoIndices[group.frontSubIdx]];
+      if (!frontPhotoUrl) continue;
+
+      const [header, base64] = frontPhotoUrl.split(",");
       const mimeType = header.match(/:(.*?);/)?.[1] ?? "image/jpeg";
       const ext = mimeType.split("/")[1] ?? "jpg";
-      const path = `${user.id}/${Date.now()}_${idx}_front.${ext}`;
-      const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+      const path = `${user.id}/${Date.now()}_multi_${idx}.${ext}`;
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
       const blob = new Blob([bytes], { type: mimeType });
-      const { error: upErr } = await supabase.storage.from("clothing-images").upload(path, blob, { contentType: mimeType, upsert: true });
-      if (upErr) { setPublishError("Upload failed for " + (item.category ?? "an item")); setPhase("review"); return; }
+
+      const { error: upErr } = await supabase.storage
+        .from("clothing-images")
+        .upload(path, blob, { contentType: mimeType, upsert: true });
+      if (upErr) { setPublishError(`Upload failed for item ${idx + 1}`); setPhase("review"); return; }
+
       const { data: pub } = supabase.storage.from("clothing-images").getPublicUrl(path);
 
-      await supabase.from("clothing").insert({
+      const coinsToSave = group.coins_value ?? calculateCoins(group.condition, group.brand, group.category);
+      const { error: dbErr } = await supabase.from("clothing").insert({
         user_id: user.id,
-        title: item.category || "Article",
-        brand: item.brand || null,
-        size: item.size || null,
-        condition: item.condition || null,
-        style: item.style || null,
-        category: item.category || null,
-        description: item.description || null,
+        title: group.category || group.brand || "Item",
+        brand: group.brand || null,
+        size: group.size || null,
+        color: group.color || null,
+        condition: group.condition || null,
+        style: group.style || null,
+        category: group.category || null,
+        description: group.description || null,
         image_url: pub.publicUrl,
         status: "active",
-        coins_value: item.coins_value ?? 20,
+        coins_value: coinsToSave,
       });
+      if (dbErr) { setPublishError(`DB error for item ${idx + 1}: ${dbErr.message}`); setPhase("review"); return; }
     }
-    router.push("/profile");
+
+    // Full reload so the profile page re-fetches items from Supabase
+    window.location.href = "/profile";
   }
 
+  /* ════════════════════════════════════════════════════════════════ */
+  /*  PHASE: PICK                                                     */
+  /* ════════════════════════════════════════════════════════════════ */
   if (phase === "pick") {
     return (
       <div style={{ width: "100%", minHeight: "100dvh", background: "#f9f4e8", fontFamily: FONT }}>
         <HeaderBar onBack={() => router.back()} title="Multiple items" />
-        <div style={{ padding: "24px 24px 140px", display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <p style={{ fontSize: 15, color: "#7a6f5d", textAlign: "center", lineHeight: 1.6, marginBottom: 32 }}>
-            Select up to 12 photos.<br />AI will analyze each item separately.
+
+        <div style={{ padding: "28px 24px 80px", display: "flex", flexDirection: "column", alignItems: "center" }}>
+          {/* Description */}
+          <p style={{ fontSize: 15, color: "#7a6f5d", textAlign: "center", lineHeight: 1.65, marginBottom: 6, maxWidth: 290 }}>
+            Select all your photos at once.<br />
+            AI will <strong style={{ color: "#3c2f22" }}>group them by item</strong> and analyse each one automatically.
           </p>
+          <p style={{ fontSize: 12, color: "#b3a896", textAlign: "center", marginBottom: 36 }}>
+            E.g. 3 photos of a sweater + 4 of jeans → 2 items detected
+          </p>
+
+          {/* Pick button */}
           <button
             onClick={() => fileRef.current?.click()}
-            style={{ width: 180, height: 180, borderRadius: 30, border: "2.5px dashed #b89b6e", background: "#3c2f22", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12 }}
+            style={{
+              width: 196, height: 196, borderRadius: 36,
+              border: "2.5px dashed #b89b6e",
+              background: "#3c2f22",
+              cursor: "pointer",
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14,
+              boxShadow: "0 10px 36px rgba(60,47,34,0.28)",
+            }}
           >
-            <svg width="32" height="32" viewBox="0 0 56 56" fill="none"><rect x="6" y="16" width="44" height="30" rx="6" stroke="#FFC543" strokeWidth="3" /><circle cx="28" cy="31" r="8" stroke="#FFC543" strokeWidth="3" /><path d="M22 20L26 14H30L34 20" stroke="#FFC543" strokeWidth="3" strokeLinecap="round" /></svg>
-            <span style={{ color: "#FFC543", fontWeight: 700, fontSize: 15 }}>Choose photos</span>
+            {/* Stack-of-photos icon */}
+            <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+              {/* Back card */}
+              <rect x="10" y="26" width="44" height="32" rx="7" fill="rgba(255,197,67,0.18)" stroke="#FFC543" strokeWidth="2"
+                transform="rotate(-9 32 42)" />
+              {/* Mid card */}
+              <rect x="10" y="26" width="44" height="32" rx="7" fill="rgba(255,197,67,0.30)" stroke="#FFC543" strokeWidth="2"
+                transform="rotate(-4 32 42)" />
+              {/* Front card — camera face */}
+              <rect x="10" y="26" width="44" height="32" rx="7" fill="#3c2f22" stroke="#FFC543" strokeWidth="2" />
+              {/* Viewfinder bump */}
+              <path d="M28 26h-3a3 3 0 00-3 3" stroke="#FFC543" strokeWidth="1.8" strokeLinecap="round" />
+              {/* Lens ring */}
+              <circle cx="32" cy="42" r="9" stroke="#FFC543" strokeWidth="2" />
+              {/* Lens fill */}
+              <circle cx="32" cy="42" r="4" fill="#FFC543" />
+              {/* Flash dot */}
+              <circle cx="46" cy="31" r="2" fill="#FFC543" />
+            </svg>
+            <span style={{ color: "#FFC543", fontWeight: 800, fontSize: 15, letterSpacing: 0.2 }}>Choose photos</span>
           </button>
-          <input ref={fileRef} type="file" accept="image/*" multiple onChange={(e) => e.target.files && handleFiles(e.target.files)} style={{ display: "none" }} />
+
+          <input
+            ref={fileRef} type="file" accept="image/*" multiple
+            onChange={(e) => e.target.files && handleFiles(e.target.files)}
+            style={{ display: "none" }}
+          />
+
+          <p style={{ marginTop: 20, fontSize: 12, color: "#b3a896", textAlign: "center" }}>Up to 12 photos total</p>
+
+          {/* Tips */}
+          <div style={{ marginTop: 36, width: "100%", maxWidth: 320, display: "flex", flexDirection: "column", gap: 16 }}>
+            {[
+              { icon: "📸", text: "Take front, back, label & detail shots for each item" },
+              { icon: "🤖", text: "AI groups photos of the same item automatically" },
+              { icon: "✏️", text: "Review and tweak each item before publishing" },
+            ].map(({ icon, text }) => (
+              <div key={text} style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+                <span style={{ fontSize: 22, flexShrink: 0, marginTop: 1 }}>{icon}</span>
+                <span style={{ fontSize: 13, color: "#7a6f5d", lineHeight: 1.55 }}>{text}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
   }
 
-  if (phase === "publishing") {
+  /* ════════════════════════════════════════════════════════════════ */
+  /*  PHASE: GROUPING                                                 */
+  /* ════════════════════════════════════════════════════════════════ */
+  if (phase === "grouping") {
     return (
-      <div style={{ width: "100%", height: "100dvh", background: "#f9f4e8", fontFamily: FONT, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
-        <span style={{ fontSize: 48 }}>📦</span>
-        <p style={{ fontWeight: 700, fontSize: 18, color: "#3c2f22" }}>Publication en cours…</p>
-        {publishError && <p style={{ color: "#e03c3c", fontSize: 14 }}>{publishError}</p>}
+      <div style={{
+        width: "100%", height: "100dvh", background: "#f9f4e8", fontFamily: FONT,
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20, padding: "0 32px",
+      }}>
+        <style>{`@keyframes multi-spin { to { transform: rotate(360deg); } }`}</style>
+
+        {/* Thumbnails preview */}
+        {rawPhotos.length > 0 && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center", marginBottom: 8 }}>
+            {rawPhotos.slice(0, 9).map((photo, i) => (
+              <div key={i} style={{ width: 56, height: 56, borderRadius: 12, overflow: "hidden", opacity: 0.55 }}>
+                <img src={photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              </div>
+            ))}
+            {rawPhotos.length > 9 && (
+              <div style={{ width: 56, height: 56, borderRadius: 12, background: "#3c2f22", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <span style={{ color: "#FFC543", fontWeight: 700, fontSize: 13 }}>+{rawPhotos.length - 9}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Spinner */}
+        <span style={{ display: "inline-flex", animation: "multi-spin 1.1s linear infinite" }}>
+          <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
+            <path d="M44 13v11H33" stroke="#FFC543" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M8 39V28h11" stroke="#FFC543" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M13 20a15 15 0 0126-4.5l5 9M39 32a15 15 0 01-26 4.5l-5-9"
+              stroke="#FFC543" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+
+        <p style={{ fontWeight: 800, fontSize: 18, color: "#3c2f22", textAlign: "center", margin: 0 }}>
+          {groupingStatus}
+        </p>
+        <p style={{ fontSize: 13, color: "#9b8f7a", textAlign: "center", margin: 0 }}>
+          {rawPhotos.length} photo{rawPhotos.length > 1 ? "s" : ""} selected
+        </p>
       </div>
     );
   }
 
-  // Phase review
-  if (items.length === 0) return null;
-  const safeIndex = Math.min(reviewIndex, items.length - 1);
-  const current = items[safeIndex];
-  const total = items.length;
+  /* ════════════════════════════════════════════════════════════════ */
+  /*  PHASE: PUBLISHING                                               */
+  /* ════════════════════════════════════════════════════════════════ */
+  if (phase === "publishing") {
+    return (
+      <div style={{
+        width: "100%", height: "100dvh", background: "#f9f4e8", fontFamily: FONT,
+        display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16,
+      }}>
+        <span style={{ fontSize: 52 }}>📦</span>
+        <p style={{ fontWeight: 800, fontSize: 18, color: "#3c2f22", margin: 0 }}>Publishing…</p>
+        {publishError && <p style={{ color: "#e03c3c", fontSize: 14, margin: 0 }}>{publishError}</p>}
+      </div>
+    );
+  }
+
+  /* ════════════════════════════════════════════════════════════════ */
+  /*  PHASE: REVIEW                                                   */
+  /* ════════════════════════════════════════════════════════════════ */
+  if (groups.length === 0) return null;
+
+  const safeIdx = Math.min(reviewIndex, groups.length - 1);
+  const cur = groups[safeIdx];
+  const total = groups.length;
+  const allDone = !groups.some((g) => g.analyzing);
+
+  /* Current displayed photo */
+  const displayPhotoUrl = rawPhotos[cur.photoIndices[cur.activeSubIdx]] ?? "";
 
   return (
     <div style={{ width: "100%", minHeight: "100dvh", background: "#f9f4e8", fontFamily: FONT }}>
-      <style>{`@keyframes ncfade { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }`}</style>
-      {notClothingError && (
-        <div
-          onAnimationEnd={() => setNotClothingError(false)}
-          style={{
-            position: "fixed",
-            top: "calc(68px + max(env(safe-area-inset-top), 44px) + 12px)",
-            left: 16, right: 16, zIndex: 200,
-            background: "linear-gradient(135deg, #e03c3c, #f97316)",
-            color: "#fff", borderRadius: 12, padding: 16,
-            fontSize: 14, fontWeight: 600, lineHeight: 1.5,
-            boxShadow: "0 4px 20px rgba(224,60,60,0.4)",
-            animation: "ncfade 4s ease-out forwards",
-          }}
-        >
-          ⚠️ This doesn&apos;t look like a clothing item. Please upload a clear photo of the item you want to trade.
-        </div>
-      )}
-      <HeaderBar onBack={() => setPhase("pick")} title={`Article ${safeIndex + 1} / ${total}`} />
+      <style>{`@keyframes multi-spin { to { transform: rotate(360deg); } }`}</style>
 
-      {/* Indicateurs */}
-      <div style={{ display: "flex", gap: 6, padding: "12px 24px 0", justifyContent: "center" }}>
-        {items.map((_, i) => (
-          <button key={i} onClick={() => setReviewIndex(i)} style={{ width: 28, height: 6, borderRadius: 3, border: "none", cursor: "pointer", background: i === safeIndex ? "#3c2f22" : "#d9d0c4", padding: 0 }} />
-        ))}
+      <HeaderBar onBack={() => setPhase("pick")} title={`Item ${safeIdx + 1} of ${total}`} />
+
+      {/* ── Item thumbnail strip ─────────────────────────────────── */}
+      <div style={{
+        padding: "10px 16px 0", overflowX: "auto", display: "flex", gap: 8,
+        scrollbarWidth: "none", WebkitOverflowScrolling: "touch",
+      }}>
+        {groups.map((g, i) => {
+          const thumbSrc = rawPhotos[g.photoIndices[g.frontSubIdx]] ?? "";
+          const isActive = i === safeIdx;
+          return (
+            <button
+              key={g.id}
+              onClick={() => setReviewIndex(i)}
+              style={{
+                flexShrink: 0, width: 52, height: 52, borderRadius: 14,
+                border: isActive ? "2.5px solid #3c2f22" : "2px solid transparent",
+                overflow: "hidden", cursor: "pointer", background: "#3c2f22",
+                padding: 0, position: "relative",
+                boxShadow: isActive ? "0 3px 12px rgba(60,47,34,0.25)" : "none",
+                transition: "border-color 0.2s, box-shadow 0.2s",
+              }}
+            >
+              {thumbSrc
+                ? <img src={thumbSrc} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 10 }}>#{i + 1}</span>
+                  </div>
+              }
+              {/* Spinning overlay while analyzing */}
+              {g.analyzing && (
+                <div style={{
+                  position: "absolute", inset: 0, background: "rgba(0,0,0,0.52)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <span style={{ display: "inline-flex", animation: "multi-spin 1s linear infinite" }}>
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                      <path d="M15 4.5v5.25h-5.25" stroke="#FFC543" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M3 13.5V8.25h5.25" stroke="#FFC543" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M4 7a7 7 0 0111.5-2l2.5 4M14 11a7 7 0 01-11.5 2l-2.5-4"
+                        stroke="#FFC543" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </span>
+                </div>
+              )}
+              {/* Active indicator dot */}
+              {isActive && !g.analyzing && (
+                <div style={{
+                  position: "absolute", bottom: 3, left: "50%", transform: "translateX(-50%)",
+                  width: 6, height: 6, borderRadius: "50%", background: "#FFC543",
+                }} />
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      <div style={{ padding: "14px 20px 140px" }}>
-        {/* Photo */}
-        <div style={{ position: "relative", width: "100%", aspectRatio: "3/4", borderRadius: 24, overflow: "hidden", background: "#3c2f22", marginBottom: 18 }}>
-          {current.photoDataUrl
-            ? <img src={current.photoDataUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-            : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ color: "rgba(255,255,255,0.4)", fontSize: 14 }}>Loading…</span></div>
+      {/* ── Main content ─────────────────────────────────────────── */}
+      <div style={{ padding: "12px 20px 0" }}>
+
+        {/* Multi-photo strip for this group (shown only if >1 photo) */}
+        {cur.photoIndices.length > 1 && (
+          <div style={{
+            display: "flex", gap: 7, marginBottom: 10, overflowX: "auto",
+            scrollbarWidth: "none", WebkitOverflowScrolling: "touch",
+          }}>
+            {cur.photoIndices.map((photoIdx, pi) => {
+              const src = rawPhotos[photoIdx] ?? "";
+              const isCurrent = pi === cur.activeSubIdx;
+              return (
+                <button
+                  key={pi}
+                  onClick={() => patchGroup(cur.id, { activeSubIdx: pi })}
+                  style={{
+                    flexShrink: 0,
+                    width: isCurrent ? 76 : 58, height: isCurrent ? 76 : 58,
+                    borderRadius: 14,
+                    border: isCurrent ? "2.5px solid #3c2f22" : "2px solid rgba(60,47,34,0.12)",
+                    overflow: "hidden", cursor: "pointer", padding: 0,
+                    transition: "all 0.2s", background: "#e0d8cb",
+                  }}
+                >
+                  {src && <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Main photo */}
+        <div style={{
+          position: "relative", width: "100%", aspectRatio: "3/4",
+          borderRadius: 24, overflow: "hidden", background: "#3c2f22", marginBottom: 14,
+        }}>
+          {displayPhotoUrl
+            ? <img src={displayPhotoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 14 }}>Loading…</span>
+              </div>
           }
-          {current.analyzing && (
-            <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <span style={{ color: "#FFC543", fontWeight: 700, fontSize: 15 }}>Analyzing…</span>
+
+          {/* Analyzing overlay */}
+          {cur.analyzing && (
+            <div style={{
+              position: "absolute", inset: 0, background: "rgba(0,0,0,0.56)",
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14,
+            }}>
+              <span style={{ display: "inline-flex", animation: "multi-spin 1.1s linear infinite" }}>
+                <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+                  <path d="M34 10v9H25" stroke="#FFC543" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M6 30V21h9" stroke="#FFC543" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M9 16a12 12 0 0120.5-3.5l4.5 7.5M31 24a12 12 0 01-20.5 3.5L6 20"
+                    stroke="#FFC543" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+              <span style={{ color: "#FFC543", fontWeight: 800, fontSize: 15 }}>Analysing item…</span>
+            </div>
+          )}
+
+          {/* Photo count badge */}
+          {cur.photoIndices.length > 1 && (
+            <div style={{
+              position: "absolute", top: 10, right: 10,
+              background: "rgba(0,0,0,0.6)", borderRadius: 12, padding: "4px 10px",
+            }}>
+              <span style={{ color: "#fff", fontSize: 12, fontWeight: 700 }}>
+                {cur.activeSubIdx + 1} / {cur.photoIndices.length}
+              </span>
             </div>
           )}
         </div>
 
-        {!current.analyzing && (
+        {/* Fields — only once analysis is done */}
+        {!cur.analyzing && (
           <>
-            {/* Champs éditables */}
-            <SimpleField label="Category" value={current.category} onChange={(v) => updateItem(reviewIndex, { category: v })} />
-            <SimpleField label="Brand" value={current.brand} onChange={(v) => updateItem(reviewIndex, { brand: v })} />
-            <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
-              <div style={{ flex: 1 }}><SimpleField label="Size" value={current.size} onChange={(v) => updateItem(reviewIndex, { size: v })} /></div>
-              <div style={{ flex: 1 }}><SimpleField label="Condition" value={current.condition} onChange={(v) => updateItem(reviewIndex, { condition: v })} /></div>
-            </div>
-            {/* Description read-only */}
-            {current.description && (
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-                  <label style={{ fontSize: 13, color: "#7a6f5d", fontWeight: 600 }}>Description</label>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "#3a7bd5" }}>🔒 AI</span>
-                </div>
-                <div style={{ background: "#eef4fb", borderRadius: 16, padding: "10px 14px", border: "1.5px solid #c5d9ef" }}>
-                  <p style={{ margin: 0, fontSize: 13, color: "#2A2A2A", lineHeight: 1.6 }}>{current.description}</p>
-                </div>
+            {cur.error && (
+              <div style={{ marginBottom: 12, background: "#f5dede", borderRadius: 14, padding: "10px 14px" }}>
+                <p style={{ margin: 0, fontSize: 13, color: "#7a2e26" }}>⚠ {cur.error}</p>
               </div>
             )}
-            {current.error && <p style={{ color: "#e03c3c", fontSize: 13, marginBottom: 14 }}>⚠ {current.error} — you can still fill it in manually.</p>}
+
+            <SimpleField label="Category" value={cur.category} onChange={(v) => patchGroup(cur.id, { category: v })} />
+            <SimpleField label="Brand" value={cur.brand} onChange={(v) => patchGroup(cur.id, { brand: v })} />
+            <div style={{ display: "flex", gap: 10 }}>
+              <div style={{ flex: 1 }}>
+                <SimpleField label="Size" value={cur.size} onChange={(v) => patchGroup(cur.id, { size: v })} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <SimpleField label="Condition" value={cur.condition} onChange={(v) => patchGroup(cur.id, { condition: v })} />
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <div style={{ flex: 1 }}>
+                <SimpleField label="Color" value={cur.color} onChange={(v) => patchGroup(cur.id, { color: v })} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <SimpleField label="Style" value={cur.style} onChange={(v) => patchGroup(cur.id, { style: v })} />
+              </div>
+            </div>
+
+            {/* Coins banner */}
+            {(() => {
+              const coins = cur.coins_value ?? calculateCoins(cur.condition, cur.brand, cur.category);
+              return (
+                <div style={{
+                  marginBottom: 14,
+                  background: "#f0e2b8", borderRadius: 16, padding: "12px 16px",
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "#8a6d2a" }}>
+                    You&apos;ll get <strong style={{ fontSize: 17 }}>{coins}</strong> coins
+                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <input
+                      type="number"
+                      min={1} max={500}
+                      value={coins}
+                      onChange={(e) => patchGroup(cur.id, { coins_value: Number(e.target.value) })}
+                      style={{
+                        width: 64, height: 34, borderRadius: 17, border: "1.5px solid #d4b870",
+                        background: "#fff8e8", textAlign: "center", fontSize: 14, fontWeight: 700,
+                        color: "#8a6d2a", outline: "none",
+                        fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
+                      }}
+                    />
+                    <span style={{ fontSize: 18 }}>🪙</span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {cur.description && (
+              <div style={{ marginBottom: 14, background: "#eef4fb", borderRadius: 16, padding: "10px 14px", border: "1.5px solid #c5d9ef" }}>
+                <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: "#3a7bd5" }}>🔒 AI description</p>
+                <p style={{ margin: 0, fontSize: 13, color: "#2A2A2A", lineHeight: 1.6 }}>{cur.description}</p>
+              </div>
+            )}
+
+            {/* Extra padding so content isn't hidden behind fixed bar */}
+            <div style={{ height: 110 }} />
           </>
         )}
+
+        {cur.analyzing && <div style={{ height: 110 }} />}
       </div>
 
-      {/* Barre de navigation bas */}
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#f9f4e8", padding: "12px 20px calc(18px + env(safe-area-inset-bottom))", display: "flex", gap: 10 }}>
+      {/* ── Fixed bottom navigation bar ──────────────────────────── */}
+      <div style={{
+        position: "fixed", bottom: 0, left: 0, right: 0,
+        background: "#f9f4e8",
+        borderTop: "1px solid rgba(60,47,34,0.08)",
+        padding: `12px 20px calc(16px + env(safe-area-inset-bottom, 0px))`,
+        display: "flex", gap: 10,
+      }}>
+        {/* ← Previous */}
         <button
-          disabled={safeIndex === 0}
-          onClick={() => setReviewIndex((i) => i - 1)}
-          style={{ flex: 1, height: 50, borderRadius: 25, border: "none", background: safeIndex === 0 ? "#e6ddca" : "#ede8dc", color: safeIndex === 0 ? "#b3a896" : "#3c2f22", fontWeight: 700, fontSize: 15, cursor: safeIndex === 0 ? "not-allowed" : "pointer" }}
-        >← Previous</button>
-        {safeIndex < total - 1
-          ? <button onClick={() => setReviewIndex((i) => i + 1)} style={{ flex: 2, height: 50, borderRadius: 25, border: "none", background: "#3c2f22", color: "#FFC543", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>Next →</button>
-          : <button onClick={publishAll} disabled={items.some(it => it.analyzing)} style={{ flex: 2, height: 50, borderRadius: 25, border: "none", background: items.some(it => it.analyzing) ? "#e6ddca" : "#FFC543", color: items.some(it => it.analyzing) ? "#b3a896" : "#2D1A0A", fontWeight: 800, fontSize: 16, cursor: "pointer", boxShadow: "0 6px 18px rgba(255,197,67,0.4)" }}>Publish all ({total})</button>
-        }
+          disabled={safeIdx === 0}
+          onClick={() => setReviewIndex((i) => Math.max(0, i - 1))}
+          style={{
+            width: 52, height: 52, borderRadius: 26,
+            border: "none",
+            background: safeIdx === 0 ? "#e6ddca" : "#ede8dc",
+            color: safeIdx === 0 ? "#b3a896" : "#3c2f22",
+            fontWeight: 700, fontSize: 20,
+            cursor: safeIdx === 0 ? "not-allowed" : "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >←</button>
+
+        {/* Centre button: Next item OR Publish all */}
+        {safeIdx < total - 1 ? (
+          <button
+            onClick={() => setReviewIndex((i) => i + 1)}
+            style={{
+              flex: 1, height: 52, borderRadius: 26,
+              border: "none", background: "#3c2f22", color: "#FFC543",
+              fontWeight: 800, fontSize: 15, cursor: "pointer",
+            }}
+          >
+            Next item →
+          </button>
+        ) : (
+          <button
+            onClick={publishAll}
+            disabled={!allDone}
+            style={{
+              flex: 1, height: 52, borderRadius: 26, border: "none",
+              background: allDone ? "#FFC543" : "#e6ddca",
+              color: allDone ? "#2D1A0A" : "#b3a896",
+              fontWeight: 800, fontSize: 15,
+              cursor: allDone ? "pointer" : "not-allowed",
+              boxShadow: allDone ? "0 6px 20px rgba(255,197,67,0.4)" : "none",
+              transition: "background 0.3s, box-shadow 0.3s",
+            }}
+          >
+            {allDone ? `Publish ${total} item${total > 1 ? "s" : ""}` : "Analysing…"}
+          </button>
+        )}
+
+        {/* Quick-publish shortcut (shown when not on last item) */}
+        {safeIdx < total - 1 && (
+          <button
+            onClick={publishAll}
+            disabled={!allDone}
+            title={allDone ? `Publish all ${total} items` : "Still analysing…"}
+            style={{
+              width: 52, height: 52, borderRadius: 26, border: "none",
+              background: allDone ? "#FFC543" : "#e6ddca",
+              color: allDone ? "#2D1A0A" : "#b3a896",
+              fontWeight: 800, fontSize: 10,
+              cursor: allDone ? "pointer" : "not-allowed",
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+              gap: 1, lineHeight: 1.2, flexShrink: 0,
+              transition: "background 0.3s",
+            }}
+          >
+            <span style={{ fontSize: 16 }}>✓</span>
+            <span>All</span>
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
+/* ─────────────────────────────────────────────────────────────────── */
+/*  Coins calculation (mirrors the formula in single upload)            */
+/* ─────────────────────────────────────────────────────────────────── */
+function calculateCoins(condition: string, brand: string, category: string): number {
+  const cat = (category ?? "").toLowerCase();
+  let base = 20;
+  if (cat.includes("outerwear") || cat.includes("jacket") || cat.includes("coat")) base = 40;
+  else if (cat.includes("shoes") || cat.includes("sneakers") || cat.includes("boots")) base = 35;
+  else if (cat.includes("dress")) base = 30;
+  else if (cat.includes("bottom") || cat.includes("jeans") || cat.includes("pant")) base = 25;
+  else if (cat.includes("sport")) base = 25;
+  else if (cat.includes("accessori") || cat.includes("bag") || cat.includes("belt")) base = 20;
+
+  const b = (brand ?? "").toLowerCase();
+  let brandMult = 1.0;
+  const luxury = ["gucci","louis vuitton","lv","prada","balenciaga","off-white","dior","versace","moncler","ysl","saint laurent","bottega","fendi"];
+  const premium = ["ralph lauren","tommy hilfiger","calvin klein","hugo boss","lacoste","burberry","armani","boss"];
+  const popular = ["nike","adidas","zara","h&m","levi","north face","stone island","carhartt","new balance","puma","reebok","jordan","converse","vans","champion"];
+  const fastFashion = ["primark","shein","boohoo","forever 21","asos","prettylittlething","missguided"];
+  if (luxury.some((l) => b.includes(l))) brandMult = 4.0;
+  else if (premium.some((p) => b.includes(p))) brandMult = 2.5;
+  else if (popular.some((p) => b.includes(p))) brandMult = 1.8;
+  else if (fastFashion.some((f) => b.includes(f))) brandMult = 0.8;
+
+  const c = (condition ?? "").toLowerCase();
+  let condMult = 1.0;
+  if (c === "new") condMult = 2.0;
+  else if (c === "like_new") condMult = 1.6;
+  else if (c === "good") condMult = 1.2;
+  else if (c === "used") condMult = 0.8;
+  else if (c === "worn") condMult = 0.5;
+
+  return Math.min(500, Math.max(5, Math.round(base * brandMult * condMult)));
+}
+
+/* ─────────────────────────────────────────────────────────────────── */
+/*  Sub-components                                                      */
+/* ─────────────────────────────────────────────────────────────────── */
+
 function HeaderBar({ onBack, title }: { onBack: () => void; title: string }) {
   return (
     <>
-      <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, background: "#3c2f22", height: "calc(68px + max(env(safe-area-inset-top), 44px))", borderBottomLeftRadius: 30, borderBottomRightRadius: 30, display: "flex", alignItems: "flex-end", paddingTop: "max(env(safe-area-inset-top), 44px)", paddingBottom: 14, paddingLeft: 16, paddingRight: 16 }}>
-        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", marginRight: 12 }}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15 5L8 12L15 19" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      <div style={{
+        position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+        background: "#3c2f22",
+        height: "calc(68px + max(env(safe-area-inset-top), 44px))",
+        borderBottomLeftRadius: 30, borderBottomRightRadius: 30,
+        display: "flex", alignItems: "flex-end",
+        paddingTop: "max(env(safe-area-inset-top), 44px)",
+        paddingBottom: 14, paddingLeft: 16, paddingRight: 16,
+      }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", marginRight: 12, padding: 0 }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M15 5L8 12L15 19" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         </button>
         <span style={{ color: "#fff", fontWeight: 800, fontSize: 18, flex: 1 }}>{title}</span>
         <div style={{ position: "relative", width: 80, height: 28 }}>
@@ -298,11 +725,29 @@ function HeaderBar({ onBack, title }: { onBack: () => void; title: string }) {
   );
 }
 
-function SimpleField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function SimpleField({
+  label, value, onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
   return (
     <div style={{ marginBottom: 14 }}>
-      <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#7a6f5d", marginBottom: 5 }}>{label}</label>
-      <input value={value} onChange={(e) => onChange(e.target.value)} style={{ width: "100%", height: 46, background: "#fff", border: "none", borderRadius: 23, padding: "0 16px", fontSize: 15, color: "#2D1A0A", outline: "none", boxSizing: "border-box", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }} />
+      <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#7a6f5d", marginBottom: 5 }}>
+        {label}
+      </label>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          width: "100%", height: 46, background: "#fff", border: "none",
+          borderRadius: 23, padding: "0 16px", fontSize: 15, color: "#2D1A0A",
+          outline: "none", boxSizing: "border-box",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+          fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
+        }}
+      />
     </div>
   );
 }

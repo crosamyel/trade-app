@@ -119,7 +119,7 @@ export default function HomePage() {
       let myCity = "";
       try {
         const { data: prof } = await supabase
-          .from("profiles").select("pref_styles, pref_sizes, pref_min_coins, city, coins_balance, banned").eq("id", user.id).maybeSingle();
+          .from("profiles").select("*").eq("id", user.id).maybeSingle();
         if (prof?.banned) { setIsBanned(true); setLoading(false); return; }
         if (typeof prof?.coins_balance === "number") setMyCoins(prof.coins_balance);
         if (Array.isArray(prof?.pref_sizes)) pref_sizes = prof.pref_sizes;

@@ -76,10 +76,11 @@ export default function ProfilePage() {
       } catch { /* profiles unavailable */ }
 
       setLoadingItems(true);
-      // My items (real articles)
-      const { data: clothes } = await supabase
-        .from("clothing").select("id, image_url, title, price_coins, coins_value, status, created_at")
+      // My items — select * so a missing column (e.g. price_coins) never crashes the query
+      const { data: clothes, error: clothesErr } = await supabase
+        .from("clothing").select("*")
         .eq("user_id", user.id).order("created_at", { ascending: false });
+      if (clothesErr) console.error("[profile] clothing query error:", clothesErr.message);
       setItems((clothes as Item[]) ?? []);
 
       // Saved / liked items
