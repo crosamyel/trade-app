@@ -2,13 +2,11 @@ import { createClient } from '@supabase/supabase-js';
 
 const ADMIN_EMAIL = 'crosamyel@gmail.com';
 
-// Service role key bypasses RLS — server-side only
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
 export async function GET(request) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
   try {
     // Verify the requester is the admin
     const authHeader = request.headers.get('authorization');

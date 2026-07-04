@@ -1,15 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
 
-// Use service role key — this runs server-side only
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
 export async function GET(request) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   // Security: verify this is called by Vercel Cron or admin
   const authHeader = request.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {

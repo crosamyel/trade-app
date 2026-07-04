@@ -5,12 +5,11 @@
 import webpush from "web-push";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
 export async function POST(request) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
   // Initialise VAPID ici (pas au module level) pour éviter un crash si les env vars
   // ne sont pas encore configurées dans Vercel
   const vapidPublic = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
