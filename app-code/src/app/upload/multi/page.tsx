@@ -7,6 +7,38 @@ import { supabase } from "@/lib/supabase";
 
 const FONT = "'Helvetica Neue', Helvetica, Arial, sans-serif";
 
+const SIZES = ["XS", "S", "M", "L", "XL", "XXL", "One size"];
+const CONDITIONS = ["New", "Like new", "Good", "Used", "Worn"];
+const UPLOAD_COLORS: { name: string; hex: string }[] = [
+  { name: "Black",  hex: "#1c1c1c" }, { name: "White",  hex: "#f0ede8" },
+  { name: "Grey",   hex: "#9a9a9a" }, { name: "Beige",  hex: "#d8cdb5" },
+  { name: "Brown",  hex: "#6b4a2b" }, { name: "Blue",   hex: "#3a7bd5" },
+  { name: "Green",  hex: "#5d8f3c" }, { name: "Red",    hex: "#d94040" },
+  { name: "Yellow", hex: "#FFC543" }, { name: "Pink",   hex: "#e58fb0" },
+  { name: "Orange", hex: "#D97A3A" }, { name: "Purple", hex: "#8a5fb0" },
+];
+function normalizeColor(aiColor: string): string {
+  const c = (aiColor ?? "").toLowerCase().trim();
+  const map: [string[], string][] = [
+    [["black","noir","zwart","negro","schwarz","dark"], "Black"],
+    [["white","blanc","wit","blanco","cream","ivoire","ivory"], "White"],
+    [["grey","gray","gris","grijs","grau","silver"], "Grey"],
+    [["beige","sand","sable","camel","ecru","taupe"], "Beige"],
+    [["brown","marron","bruin","braun","tan","caramel","chocolate"], "Brown"],
+    [["blue","bleu","blauw","blau","navy","marine","indigo","denim"], "Blue"],
+    [["green","vert","groen","grün","grun","khaki","olive"], "Green"],
+    [["red","rouge","rood","rot","burgundy","bordeaux","wine"], "Red"],
+    [["yellow","jaune","geel","gelb","gold","mustard"], "Yellow"],
+    [["pink","rose","roze","rosa","fuchsia","magenta","salmon"], "Pink"],
+    [["orange","oranje"], "Orange"],
+    [["purple","violet","lila","mauve","lavender","lilac"], "Purple"],
+  ];
+  for (const [aliases, standard] of map) {
+    if (aliases.some((a) => c.includes(a))) return standard;
+  }
+  return "";
+}
+
 type PhotoGroup = {
   id: number;
   /** Indices into rawPhotos[] that belong to this group */
@@ -529,22 +561,10 @@ export default function MultiUploadPage() {
 
             <SimpleField label="Category" value={cur.category} onChange={(v) => patchGroup(cur.id, { category: v })} />
             <SimpleField label="Brand" value={cur.brand} onChange={(v) => patchGroup(cur.id, { brand: v })} />
-            <div style={{ display: "flex", gap: 10 }}>
-              <div style={{ flex: 1 }}>
-                <SimpleField label="Size" value={cur.size} onChange={(v) => patchGroup(cur.id, { size: v })} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <SimpleField label="Condition" value={cur.condition} onChange={(v) => patchGroup(cur.id, { condition: v })} />
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <div style={{ flex: 1 }}>
-                <SimpleField label="Color" value={cur.color} onChange={(v) => patchGroup(cur.id, { color: v })} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <SimpleField label="Style" value={cur.style} onChange={(v) => patchGroup(cur.id, { style: v })} />
-              </div>
-            </div>
+            <ColorSwatches value={cur.color} onChange={(v) => patchGroup(cur.id, { color: v })} />
+            <ChipField label="Size" value={cur.size} onChange={(v) => patchGroup(cur.id, { size: v })} options={SIZES} />
+            <ChipField label="Condition" value={cur.condition} onChange={(v) => patchGroup(cur.id, { condition: v })} options={CONDITIONS} />
+            <SimpleField label="Style" value={cur.style} onChange={(v) => patchGroup(cur.id, { style: v })} />
 
             {/* Coins banner — ±15% autour de la suggestion TRADE */}
             {(() => {
@@ -791,6 +811,68 @@ function SimpleField({
           fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
         }}
       />
+    </div>
+  );
+}
+
+function ColorSwatches({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const normalized = UPLOAD_COLORS.find((c) => c.name === value)?.name ?? normalizeColor(value);
+  const active = normalized || value;
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#7a6f5d", marginBottom: 8 }}>Color</label>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+        {UPLOAD_COLORS.map((c) => {
+          const isActive = active === c.name;
+          return (
+            <button
+              key={c.name}
+              onClick={() => onChange(isActive ? "" : c.name)}
+              title={c.name}
+              style={{
+                display: "flex", alignItems: "center", gap: 5,
+                height: 32, padding: "0 10px 0 6px",
+                borderRadius: 16, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700,
+                background: isActive ? "#3c2f22" : "#ede8dc",
+                color: isActive ? "#FFC543" : "#3c2f22",
+                transition: "background 0.15s, color 0.15s",
+              }}
+            >
+              <span style={{
+                width: 13, height: 13, borderRadius: "50%", flexShrink: 0,
+                background: c.hex,
+                border: isActive ? "2px solid #FFC543" : "1.5px solid rgba(45,26,10,0.18)",
+              }} />
+              {c.name}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ChipField({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: string[] }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#7a6f5d", marginBottom: 8 }}>{label}</label>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+        {options.map((opt) => (
+          <button
+            key={opt}
+            onClick={() => onChange(value === opt ? "" : opt)}
+            style={{
+              padding: "6px 13px", borderRadius: 20, border: "none", cursor: "pointer",
+              fontSize: 12, fontWeight: 700,
+              background: value === opt ? "#3c2f22" : "#ede8dc",
+              color: value === opt ? "#FFC543" : "#3c2f22",
+              transition: "background 0.15s, color 0.15s",
+            }}
+          >
+            {opt}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

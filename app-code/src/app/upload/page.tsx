@@ -33,6 +33,40 @@ const EMPTY_ANALYSIS: Analysis = {
   coins_value: null, coins_reason: null, fake_warning: false, fake_reason: null,
 };
 
+const SIZES = ["XS", "S", "M", "L", "XL", "XXL", "One size"];
+const CONDITIONS = ["New", "Like new", "Good", "Used", "Worn"];
+const UPLOAD_COLORS: { name: string; hex: string }[] = [
+  { name: "Black",  hex: "#1c1c1c" }, { name: "White",  hex: "#f0ede8" },
+  { name: "Grey",   hex: "#9a9a9a" }, { name: "Beige",  hex: "#d8cdb5" },
+  { name: "Brown",  hex: "#6b4a2b" }, { name: "Blue",   hex: "#3a7bd5" },
+  { name: "Green",  hex: "#5d8f3c" }, { name: "Red",    hex: "#d94040" },
+  { name: "Yellow", hex: "#FFC543" }, { name: "Pink",   hex: "#e58fb0" },
+  { name: "Orange", hex: "#D97A3A" }, { name: "Purple", hex: "#8a5fb0" },
+];
+
+/* Normalise la couleur renvoyée par l'IA vers nos valeurs standards */
+function normalizeColor(aiColor: string): string {
+  const c = (aiColor ?? "").toLowerCase().trim();
+  const map: [string[], string][] = [
+    [["black","noir","zwart","negro","schwarz","dark"], "Black"],
+    [["white","blanc","wit","blanco","weiß","weiss","cream","ivoire","ivory"], "White"],
+    [["grey","gray","gris","grijs","grau","silver","argent"], "Grey"],
+    [["beige","sand","sable","camel","ecru","taupe"], "Beige"],
+    [["brown","marron","bruin","braun","tan","caramel","chocolate","chocolat"], "Brown"],
+    [["blue","bleu","blauw","blau","navy","marine","indigo","denim","cobalt"], "Blue"],
+    [["green","vert","groen","grün","grun","khaki","olive","forest"], "Green"],
+    [["red","rouge","rood","rot","burgundy","bordeaux","wine","cardinal"], "Red"],
+    [["yellow","jaune","geel","gelb","gold","mustard"], "Yellow"],
+    [["pink","rose","roze","rosa","fuchsia","magenta","salmon","saumon"], "Pink"],
+    [["orange","oranje"], "Orange"],
+    [["purple","violet","lila","mauve","lavender","lavande","lilac"], "Purple"],
+  ];
+  for (const [aliases, standard] of map) {
+    if (aliases.some((a) => c.includes(a))) return standard;
+  }
+  return "";
+}
+
 /* Les 4 slots photo : front + back + label obligatoires, detail optionnel */
 export type SlotId = "front" | "back" | "label" | "detail";
 export type Photos = Record<SlotId, string | null>;
@@ -43,6 +77,7 @@ export default function UploadPage() {
   const [photos, setPhotos] = useState<Photos>({ front: null, back: null, label: null, detail: null });
   const [analysis, setAnalysis] = useState<Analysis>(EMPTY_ANALYSIS);
   const [notClothingError, setNotClothingError] = useState(false);
+  const [published, setPublished] = useState(false);
 
   function handleNotClothing() {
     setPhotos({ front: null, back: null, label: null, detail: null });
@@ -104,7 +139,43 @@ export default function UploadPage() {
         <StepAnalyse photos={photos} onDone={handleAnalysisDone} onNotClothing={handleNotClothing} />
       )}
       {step === 3 && (
-        <StepVerify photos={photos} analysis={analysis} setAnalysis={setAnalysis} />
+        <StepVerify photos={photos} analysis={analysis} setAnalysis={setAnalysis} onPublished={() => setPublished(true)} />
+      )}
+
+      {/* ── Success overlay ── */}
+      {published && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 300,
+          background: "rgba(20,12,4,0.55)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          padding: 24,
+        }}>
+          <div style={{
+            background: "#f9f4e8", borderRadius: 28, padding: "36px 28px",
+            maxWidth: 340, width: "100%", textAlign: "center",
+            boxShadow: "0 24px 60px rgba(0,0,0,0.35)",
+          }}>
+            <div style={{ fontSize: 56, marginBottom: 12 }}>🎉</div>
+            <h2 style={{ margin: "0 0 8px", fontSize: 24, fontWeight: 800, color: "#3c2f22" }}>
+              Item published!
+            </h2>
+            <p style={{ margin: "0 0 28px", fontSize: 14, color: "#7a6f5d", lineHeight: 1.5 }}>
+              Your item is now live on TRADE.<br />Other users can discover and trade with you.
+            </p>
+            <button
+              onClick={() => router.push("/profile")}
+              style={{ width: "100%", height: 52, borderRadius: 26, background: "#FFC543", border: "none", color: "#2D1A0A", fontSize: 16, fontWeight: 800, cursor: "pointer", marginBottom: 12, boxShadow: "0 6px 18px rgba(255,197,67,0.45)" }}
+            >
+              View my profile
+            </button>
+            <button
+              onClick={() => router.push("/home")}
+              style={{ width: "100%", height: 44, borderRadius: 22, background: "transparent", border: "1.5px solid #3c2f22", color: "#3c2f22", fontSize: 14, fontWeight: 700, cursor: "pointer" }}
+            >
+              Go to Explore
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -528,16 +599,23 @@ function calculateCoins(condition: string, brand: string, category: string): num
 }
 
 /* ===== ÉTAPE 3 — VERIFY ===== */
-function StepVerify({ photos, analysis, setAnalysis }: {
+function StepVerify({ photos, analysis, setAnalysis, onPublished }: {
   photos: Photos;
   analysis: Analysis;
   setAnalysis: (a: Analysis) => void;
+  onPublished: () => void;
 }) {
-  const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const coinsValue = analysis.coins_value ?? calculateCoins(analysis.condition, analysis.brand, analysis.category);
+  // Coins — adjustable ±15% around TRADE suggestion
+  const initialSuggested = analysis.coins_value ?? calculateCoins(analysis.condition, analysis.brand, analysis.category);
+  const [coinsSuggested] = useState(initialSuggested);
+  const [coinsValue, setCoinsValue] = useState(initialSuggested);
+  const minCoins = Math.max(5, Math.round(coinsSuggested * 0.85));
+  const maxCoins = Math.min(500, Math.round(coinsSuggested * 1.15));
+  const clampCoins = (v: number) => Math.min(maxCoins, Math.max(minCoins, v));
+  const coinsPct = coinsSuggested > 0 ? Math.round(((coinsValue - coinsSuggested) / coinsSuggested) * 100) : 0;
 
   // Only front photo is required — back/label are optional but help AI analysis
   const canSubmit = !!photos.front;
@@ -592,7 +670,7 @@ function StepVerify({ photos, analysis, setAnalysis }: {
       if (photos.label)  labelUrl  = await uploadDataUrl(photos.label,  user.id, "label");
       if (photos.detail) detailUrl = await uploadDataUrl(photos.detail, user.id, "detail");
 
-      const insertData = {
+      const insertData: Record<string, unknown> = {
         user_id:          user.id,
         title:            analysis.title || analysis.category || "Item",
         brand:            analysis.brand    || null,
@@ -609,6 +687,8 @@ function StepVerify({ photos, analysis, setAnalysis }: {
         location:         null,
         status:           "active",
       };
+      // color — only insert if column exists in DB (avoids crash if not migrated yet)
+      if (analysis.color) insertData.color = analysis.color;
       console.log("[upload] inserting:", insertData);
 
       const { error: dbErr } = await supabase.from("clothing").insert(insertData);
@@ -619,7 +699,7 @@ function StepVerify({ photos, analysis, setAnalysis }: {
         return;
       }
       console.log("[upload] item created successfully");
-      router.push("/home");
+      onPublished();
 
     } catch (e) {
       console.error("[upload] unexpected:", e);
@@ -660,30 +740,55 @@ function StepVerify({ photos, analysis, setAnalysis }: {
 
       <div>
         <Field label="Title *" value={analysis.title || analysis.category} onChange={(v) => setAnalysis({ ...analysis, title: v })} placeholder="ex: Nike Black Hoodie" />
-        <div style={{ display: "flex", gap: 10 }}>
-          <div style={{ flex: 1 }}><Field label="Brand" value={analysis.brand} onChange={(v) => setAnalysis({ ...analysis, brand: v })} placeholder="ex: Nike" /></div>
-          <div style={{ flex: 1 }}><Field label="Size" value={analysis.size} onChange={(v) => setAnalysis({ ...analysis, size: v })} placeholder="ex: M" /></div>
-        </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          <div style={{ flex: 1 }}><Field label="Color" value={analysis.color} onChange={(v) => setAnalysis({ ...analysis, color: v })} placeholder="ex: Black" /></div>
-          <div style={{ flex: 1 }}><Field label="Condition" value={analysis.condition} onChange={(v) => setAnalysis({ ...analysis, condition: v })} placeholder="ex: Good" /></div>
-        </div>
+        <Field label="Brand" value={analysis.brand} onChange={(v) => setAnalysis({ ...analysis, brand: v })} placeholder="ex: Nike" />
+        <ChipField label="Size" value={analysis.size} onChange={(v) => setAnalysis({ ...analysis, size: v })} options={SIZES} />
+        <ChipField label="Condition" value={analysis.condition} onChange={(v) => setAnalysis({ ...analysis, condition: v })} options={CONDITIONS} />
+        <ColorSwatches value={analysis.color} onChange={(v) => setAnalysis({ ...analysis, color: v })} />
         <Field label="Style" value={analysis.style} onChange={(v) => setAnalysis({ ...analysis, style: v })} placeholder="ex: Streetwear" />
         <DescField value={analysis.description} onChange={(v) => setAnalysis({ ...analysis, description: v })} />
       </div>
 
-      {/* Bandeau coins */}
-      <div style={{ marginTop: 14, background: "#f0e2b8", borderRadius: 16, padding: "10px 16px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-          <span style={{ fontSize: 15, fontWeight: 700, color: "#8a6d2a" }}>
-            🪙 You will get <strong>{coinsValue}</strong> coins
+      {/* Bandeau coins — adjustable ±15% */}
+      <div style={{ marginTop: 14, background: "#f0e2b8", borderRadius: 18, padding: "12px 16px" }}>
+        <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "#7a6f5d", marginBottom: 8 }}>
+          🪙 Coins value
+          <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: "#b3a896" }}>— TRADE suggestion ±15%</span>
+        </label>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button
+            onClick={() => setCoinsValue((v) => clampCoins(v - 1))}
+            disabled={coinsValue <= minCoins}
+            style={{ width: 36, height: 36, borderRadius: "50%", border: "none", background: coinsValue <= minCoins ? "#c9b98a" : "#3c2f22", color: "#FFC543", fontSize: 22, fontWeight: 800, cursor: coinsValue <= minCoins ? "not-allowed" : "pointer", lineHeight: 1, flexShrink: 0 }}
+          >−</button>
+          <input
+            type="number"
+            min={minCoins} max={maxCoins}
+            value={coinsValue}
+            onChange={(e) => setCoinsValue(clampCoins(Number(e.target.value) || minCoins))}
+            style={{ flex: 1, height: 40, background: "#fff", border: "1.5px solid #d4b870", borderRadius: 12, textAlign: "center", fontSize: 20, fontWeight: 800, color: "#8a6d2a", outline: "none", fontFamily: "inherit" }}
+          />
+          <button
+            onClick={() => setCoinsValue((v) => clampCoins(v + 1))}
+            disabled={coinsValue >= maxCoins}
+            style={{ width: 36, height: 36, borderRadius: "50%", border: "none", background: coinsValue >= maxCoins ? "#c9b98a" : "#3c2f22", color: "#FFC543", fontSize: 22, fontWeight: 800, cursor: coinsValue >= maxCoins ? "not-allowed" : "pointer", lineHeight: 1, flexShrink: 0 }}
+          >+</button>
+          <span style={{ fontSize: 22, flexShrink: 0 }}>🪙</span>
+        </div>
+        <input
+          type="range" min={minCoins} max={maxCoins}
+          value={coinsValue}
+          onChange={(e) => setCoinsValue(Number(e.target.value))}
+          style={{ width: "100%", marginTop: 10, accentColor: "#3c2f22" }}
+        />
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#9a7d3a", marginTop: 2 }}>
+          <span>{minCoins} coins</span>
+          <span style={{ fontWeight: 700 }}>
+            {coinsPct === 0 ? "TRADE suggestion" : coinsPct > 0 ? `+${coinsPct}%` : `${coinsPct}%`}
           </span>
-          <div style={{ position: "relative", width: 20, height: 20 }}>
-            <Image src="/coin.png" alt="coin" fill style={{ objectFit: "contain" }} />
-          </div>
+          <span>{maxCoins} coins</span>
         </div>
         {analysis.coins_reason && (
-          <p style={{ margin: "5px 0 0", fontSize: 11, color: "#9a7d3a", textAlign: "center", lineHeight: 1.4 }}>
+          <p style={{ margin: "6px 0 0", fontSize: 11, color: "#9a7d3a", lineHeight: 1.4 }}>
             💡 {analysis.coins_reason}
           </p>
         )}
@@ -727,6 +832,69 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
         placeholder={placeholder}
         style={{ width: "100%", height: 46, background: "#fff", border: value ? "1.5px solid #a8c9a8" : "1.5px solid #e0d8cc", borderRadius: 23, padding: "0 16px", fontSize: 15, color: "#2A2A2A", outline: "none", boxSizing: "border-box", boxShadow: "0 2px 6px rgba(0,0,0,0.04)", fontFamily: "inherit" }}
       />
+    </div>
+  );
+}
+
+function ColorSwatches({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  // Normalize the raw AI color string to our standard list on first render
+  const normalized = UPLOAD_COLORS.find((c) => c.name === value)?.name ?? normalizeColor(value);
+  const active = normalized || value;
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <label style={{ display: "block", fontSize: 13, color: "#7a6f5d", fontWeight: 600, marginBottom: 8 }}>Color</label>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+        {UPLOAD_COLORS.map((c) => {
+          const isActive = active === c.name;
+          return (
+            <button
+              key={c.name}
+              onClick={() => onChange(isActive ? "" : c.name)}
+              title={c.name}
+              style={{
+                display: "flex", alignItems: "center", gap: 5,
+                height: 34, padding: "0 11px 0 7px",
+                borderRadius: 17, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700,
+                background: isActive ? "#3c2f22" : "#ede8dc",
+                color: isActive ? "#FFC543" : "#3c2f22",
+                transition: "background 0.15s, color 0.15s",
+              }}
+            >
+              <span style={{
+                width: 14, height: 14, borderRadius: "50%", flexShrink: 0,
+                background: c.hex,
+                border: isActive ? "2px solid #FFC543" : "1.5px solid rgba(45,26,10,0.18)",
+              }} />
+              {c.name}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ChipField({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: string[] }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <label style={{ display: "block", fontSize: 13, color: "#7a6f5d", fontWeight: 600, marginBottom: 8 }}>{label}</label>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {options.map((opt) => (
+          <button
+            key={opt}
+            onClick={() => onChange(value === opt ? "" : opt)}
+            style={{
+              padding: "7px 14px", borderRadius: 20, border: "none", cursor: "pointer",
+              fontSize: 13, fontWeight: 700,
+              background: value === opt ? "#3c2f22" : "#ede8dc",
+              color: value === opt ? "#FFC543" : "#3c2f22",
+              transition: "background 0.15s, color 0.15s",
+            }}
+          >
+            {opt}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
