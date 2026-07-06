@@ -52,6 +52,7 @@ type PhotoGroup = {
   /** Analysis state */
   analyzing: boolean;
   analyzed: boolean;
+  title: string;
   category: string;
   brand: string;
   size: string;
@@ -151,7 +152,7 @@ export default function MultiUploadPage() {
         labelSubIdx: rawLabelIdx >= 0 ? rawLabelIdx : null,
         activeSubIdx: 0,
         analyzing: true, analyzed: false,
-        category: "", brand: "", size: "", color: "",
+        title: "", category: "", brand: "", size: "", color: "",
         condition: "", style: "", description: "",
         coins_value: null, coins_suggested: null, coins_reason: null, error: "",
       };
@@ -187,8 +188,8 @@ export default function MultiUploadPage() {
 
         patchGroup(i, {
           analyzing: false, analyzed: true, error: "",
-          category: data.category ?? "", brand: data.brand ?? "",
-          size: data.size ?? "", color: data.color ?? "",
+          title: data.title ?? "", category: data.category ?? "", brand: data.brand ?? "",
+          size: data.size ?? "", color: normalizeColor(data.color ?? "") || data.color ?? "",
           condition: data.condition ?? "", style: data.style ?? "",
           description: data.description ?? "",
           coins_value: typeof data.coins_value === "number" ? data.coins_value : null,
@@ -232,7 +233,7 @@ export default function MultiUploadPage() {
       const coinsToSave = group.coins_value ?? calculateCoins(group.condition, group.brand, group.category);
       const insertData: Record<string, unknown> = {
         user_id: user.id,
-        title: group.category || group.brand || "Item",
+        title: group.title || group.category || group.brand || "Item",
         brand: group.brand || null,
         size: group.size || null,
         condition: group.condition || null,
@@ -559,6 +560,7 @@ export default function MultiUploadPage() {
               </div>
             )}
 
+            <SimpleField label="Title" value={cur.title} onChange={(v) => patchGroup(cur.id, { title: v })} />
             <SimpleField label="Category" value={cur.category} onChange={(v) => patchGroup(cur.id, { category: v })} />
             <SimpleField label="Brand" value={cur.brand} onChange={(v) => patchGroup(cur.id, { brand: v })} />
             <ColorSwatches value={cur.color} onChange={(v) => patchGroup(cur.id, { color: v })} />
