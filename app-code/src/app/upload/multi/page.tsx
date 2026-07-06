@@ -189,7 +189,7 @@ export default function MultiUploadPage() {
         patchGroup(i, {
           analyzing: false, analyzed: true, error: "",
           title: data.title ?? "", category: data.category ?? "", brand: data.brand ?? "",
-          size: data.size ?? "", color: normalizeColor(data.color ?? "") || data.color ?? "",
+          size: data.size ?? "", color: normalizeColor(data.color ?? "") || (data.color ?? ""),
           condition: data.condition ?? "", style: data.style ?? "",
           description: data.description ?? "",
           coins_value: typeof data.coins_value === "number" ? data.coins_value : null,
