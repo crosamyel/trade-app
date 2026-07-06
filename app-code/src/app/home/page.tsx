@@ -141,11 +141,11 @@ export default function HomePage() {
         if (typeof prof?.city === "string") myCity = prof.city;
       } catch { /* profiles indisponible */ }
 
-      // Liked items to exclude from feed (cross-session)
+      // Liked items to exclude from feed — capped at 200 to stay under PostgREST URL limit
       let likedIds: string[] = [];
       try {
         const { data: likedRows } = await supabase.from("likes").select("clothing_id").eq("user_id", user.id);
-        likedIds = (likedRows ?? []).map((r: { clothing_id: string }) => String(r.clothing_id));
+        likedIds = (likedRows ?? []).slice(-200).map((r: { clothing_id: string }) => String(r.clothing_id));
       } catch { /* likes table may not exist */ }
       likedIdsRef.current = likedIds;
 
@@ -164,30 +164,36 @@ export default function HomePage() {
       const COLS = "id, user_id, image_url, image_back_url, image_label_url, image_detail_url, title, size, style, condition, coins_value, views, location, featured, profiles(username, avatar_url, city)";
       const COLS_NOJOIN = "id, user_id, image_url, image_back_url, image_label_url, image_detail_url, title, size, style, condition, coins_value, views, location, featured";
 
-      // Fetch 100 items — sort client-side by relevance score
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let q: any = supabase
-        .from("clothing").select(COLS)
-        .neq("user_id", user.id).eq("status", "active")
-        .range(0, 99);
-      if (pref_min_coins > 0) q = q.gte("coins_value", pref_min_coins);
-      if (likedIds.length > 0) q = q.not("id", "in", `(${likedIds.join(",")})`);
+      const userId = user.id;
+      async function fetchClothing(withLikedFilter: boolean): Promise<Clothing[] | null> {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let q: any = supabase
+          .from("clothing").select(COLS)
+          .neq("user_id", userId).eq("status", "active")
+          .range(0, 99);
+        if (pref_min_coins > 0) q = q.gte("coins_value", pref_min_coins);
+        if (withLikedFilter && likedIds.length > 0) q = q.not("id", "in", `(${likedIds.join(",")})`);
 
-      let clothes: Clothing[] | null = null;
-      const joined = await q;
-      if (joined.error) {
-        console.warn("Join profiles indisponible, fallback sans profiles:", joined.error.message);
+        const joined = await q;
+        if (!joined.error) return (joined.data as Clothing[]) ?? null;
+
+        console.warn("[home] profiles join failed, fallback sans profiles:", joined.error.message);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let q2: any = supabase
           .from("clothing").select(COLS_NOJOIN)
-          .neq("user_id", user.id).eq("status", "active")
+          .neq("user_id", userId).eq("status", "active")
           .range(0, 99);
         if (pref_min_coins > 0) q2 = q2.gte("coins_value", pref_min_coins);
-        if (likedIds.length > 0) q2 = q2.not("id", "in", `(${likedIds.join(",")})`);
+        if (withLikedFilter && likedIds.length > 0) q2 = q2.not("id", "in", `(${likedIds.join(",")})`);
         const plain = await q2;
-        clothes = (plain.data as Clothing[]) ?? null;
-      } else {
-        clothes = (joined.data as Clothing[]) ?? null;
+        return (plain.data as Clothing[]) ?? null;
+      }
+
+      let clothes = await fetchClothing(true);
+      // Fallback : si 0 résultats avec le filtre liked, on réessaie sans pour éviter un feed vide
+      if ((!clothes || clothes.length === 0) && likedIds.length > 0) {
+        console.warn("[home] Feed vide avec filtre liked, retry sans filtre");
+        clothes = await fetchClothing(false);
       }
 
       // Score, sort, then filter already-swiped this session
@@ -234,7 +240,19 @@ export default function HomePage() {
       .range(newOffset, newOffset + 99);
     if (minCoins > 0) q = q.gte("coins_value", minCoins);
     if (likedIds.length > 0) q = q.not("id", "in", `(${likedIds.join(",")})`);
-    const { data } = await q;
+    let { data } = await q;
+    // Fallback sans filtre liked si 0 résultats
+    if ((!data || data.length === 0) && likedIds.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let qFallback: any = supabase
+        .from("clothing").select(COLS)
+        .neq("user_id", currentUserRef.current.id)
+        .eq("status", "active")
+        .range(newOffset, newOffset + 99);
+      if (minCoins > 0) qFallback = qFallback.gte("coins_value", minCoins);
+      const fallback = await qFallback;
+      data = fallback.data;
+    }
     if (!data || data.length === 0) { hasMoreRef.current = false; setLoadingMore(false); return; }
     const seenStr = sessionStorage.getItem("trade_seen_ids") ?? "";
     const seenIds = new Set(seenStr.split(",").filter(Boolean));
