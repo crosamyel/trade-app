@@ -196,8 +196,9 @@ export default function HomePage() {
         clothes = await fetchClothing(false);
       }
 
-      // Score, sort, then filter already-swiped this session
-      const seenStr = typeof window !== "undefined" ? sessionStorage.getItem("trade_seen_ids") ?? "" : "";
+      // Score, sort, then filter already-swiped this session (clé par user pour éviter cross-contamination)
+      const seenKey = `trade_seen_ids_${userId}`;
+      const seenStr = typeof window !== "undefined" ? sessionStorage.getItem(seenKey) ?? "" : "";
       const sessionSeen = new Set(seenStr.split(",").filter(Boolean));
       const sortedItems = [...(clothes ?? [])]
         .sort((a, b) => scoreClothing(b, myCity, pref_styles, pref_sizes, myAvgCoins) - scoreClothing(a, myCity, pref_styles, pref_sizes, myAvgCoins))
@@ -254,7 +255,8 @@ export default function HomePage() {
       data = fallback.data;
     }
     if (!data || data.length === 0) { hasMoreRef.current = false; setLoadingMore(false); return; }
-    const seenStr = sessionStorage.getItem("trade_seen_ids") ?? "";
+    const seenKey = `trade_seen_ids_${currentUserRef.current!.id}`;
+    const seenStr = sessionStorage.getItem(seenKey) ?? "";
     const seenIds = new Set(seenStr.split(",").filter(Boolean));
     const sorted = [...(data as Clothing[])]
       .sort((a, b) => scoreClothing(b, city, styles, sizes, avgCoins) - scoreClothing(a, city, styles, sizes, avgCoins))
@@ -298,12 +300,13 @@ export default function HomePage() {
   }
 
   function advance() {
-    // Marquer l'item courant comme vu
-    if (current && !isCurrentAd) {
-      const seenStr = sessionStorage.getItem("trade_seen_ids") ?? "";
+    // Marquer l'item courant comme vu (clé par user)
+    if (current && !isCurrentAd && currentUser) {
+      const seenKey = `trade_seen_ids_${currentUser.id}`;
+      const seenStr = sessionStorage.getItem(seenKey) ?? "";
       const seenIds = new Set(seenStr.split(",").filter(Boolean));
       seenIds.add(String((current as Clothing).id));
-      sessionStorage.setItem("trade_seen_ids", [...seenIds].join(","));
+      sessionStorage.setItem(seenKey, [...seenIds].join(","));
     }
     setExitDir(null);
     setDragX(0); dragXRef.current = 0;
