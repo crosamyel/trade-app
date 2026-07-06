@@ -18,6 +18,7 @@ type Profile = {
   instagram?: string;
   website?: string;
   coins_balance?: number;
+  is_founder?: boolean;
 };
 
 type Clothing = {
@@ -127,6 +128,7 @@ export default function ShopPage() {
   const shopName = profile.shop_name ?? profile.username ?? "Thrift Store";
   const initial = shopName[0]?.toUpperCase() ?? "?";
   const isThrift = profile.account_type === "friperie";
+  const isFounder = profile.is_founder === true;
 
   return (
     <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: "#f9f4e8", fontFamily: FONT, minHeight: "100dvh", overflowY: "auto", animation: "slideUpDetail 0.38s cubic-bezier(0.4,0,0.2,1) both" }}>
@@ -176,6 +178,9 @@ export default function ShopPage() {
             <div style={{ background: "#FFC543", borderRadius: 8, padding: "2px 8px", display: "flex", alignItems: "center", gap: 3 }}>
               <span style={{ fontSize: 11, fontWeight: 800, color: "#3c2f22" }}>✓ Thrift Store</span>
             </div>
+          )}
+          {isFounder && (
+            <span style={{ background: "#6B21A8", color: "#fff", fontSize: 11, fontWeight: 800, padding: "3px 10px", borderRadius: 20, letterSpacing: 0.5 }}>✦ FOUNDER</span>
           )}
         </div>
 

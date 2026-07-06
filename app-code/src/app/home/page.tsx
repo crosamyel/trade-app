@@ -175,9 +175,13 @@ export default function HomePage() {
         if (withLikedFilter && likedIds.length > 0) q = q.not("id", "in", `(${likedIds.join(",")})`);
 
         const joined = await q;
-        if (!joined.error) return (joined.data as Clothing[]) ?? null;
+        if (!joined.error) {
+          console.log(`[home] fetched ${joined.data?.length ?? 0} items (withLikedFilter=${withLikedFilter}, join=ok)`);
+          return (joined.data as Clothing[]) ?? [];
+        }
 
-        console.warn("[home] profiles join failed, fallback sans profiles:", joined.error.message);
+        // Profiles join failed (foreign key missing) — fallback without join
+        console.warn("[home] profiles join failed:", joined.error.message, joined.error.code);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let q2: any = supabase
           .from("clothing").select(COLS_NOJOIN)
@@ -186,13 +190,19 @@ export default function HomePage() {
         if (pref_min_coins > 0) q2 = q2.gte("coins_value", pref_min_coins);
         if (withLikedFilter && likedIds.length > 0) q2 = q2.not("id", "in", `(${likedIds.join(",")})`);
         const plain = await q2;
-        return (plain.data as Clothing[]) ?? null;
+        if (plain.error) {
+          // RLS likely blocking — log the exact error for debugging
+          console.error("[home] ⛔ plain query also failed — check Supabase RLS policies on 'clothing' table:", plain.error.message, plain.error.code, plain.error.details);
+          return null;
+        }
+        console.log(`[home] fetched ${plain.data?.length ?? 0} items (withLikedFilter=${withLikedFilter}, fallback=ok)`);
+        return (plain.data as Clothing[]) ?? [];
       }
 
       let clothes = await fetchClothing(true);
-      // Fallback : si 0 résultats avec le filtre liked, on réessaie sans pour éviter un feed vide
-      if ((!clothes || clothes.length === 0) && likedIds.length > 0) {
-        console.warn("[home] Feed vide avec filtre liked, retry sans filtre");
+      // Always retry without liked filter if we got nothing — avoids empty feed for all cases
+      if (!clothes || clothes.length === 0) {
+        console.warn("[home] Feed vide, retry sans filtre liked");
         clothes = await fetchClothing(false);
       }
 
@@ -204,6 +214,16 @@ export default function HomePage() {
         .sort((a, b) => scoreClothing(b, myCity, pref_styles, pref_sizes, myAvgCoins) - scoreClothing(a, myCity, pref_styles, pref_sizes, myAvgCoins))
         .filter(c => !sessionSeen.has(String(c.id)));
       setStack(sortedItems);
+
+      // Restore position: detail-return (sessionStorage) takes priority over app-reopen (localStorage)
+      const detailReturnId = typeof window !== "undefined" ? sessionStorage.getItem("trade_detail_return_id") : null;
+      const savedItemId = typeof window !== "undefined" ? localStorage.getItem(`trade_current_item_${userId}`) : null;
+      const restoreId = detailReturnId ?? savedItemId;
+      if (detailReturnId) sessionStorage.removeItem("trade_detail_return_id");
+      if (restoreId) {
+        const idx = sortedItems.findIndex(item => String(item.id) === restoreId);
+        if (idx >= 0) setCurrentIndex(idx);
+      }
 
       // Load active ads (inactive by default, no ads shown until activated)
       try {
@@ -218,6 +238,15 @@ export default function HomePage() {
     }, 12000);
     init().finally(() => clearTimeout(timeout));
   }, [router]);
+
+  // Persist current item to localStorage so it survives app close/reopen
+  useEffect(() => {
+    if (!currentUser || loading) return;
+    const cur = stack[currentIndex];
+    if (!cur) return;
+    if ("isAd" in cur) return; // don't save ad positions
+    localStorage.setItem(`trade_current_item_${currentUser.id}`, String(cur.id));
+  }, [currentIndex, stack, currentUser, loading]);
 
   // Auto-charge 10 items de plus quand il reste ≤ 3 cartes
   useEffect(() => {
@@ -427,6 +456,8 @@ export default function HomePage() {
         const adLink = (current as Ad).link_url;
         if (adLink) window.open(adLink, "_blank", "noopener,noreferrer");
       } else {
+        // Save current position so we can restore it when coming back
+        sessionStorage.setItem("trade_detail_return_id", String((current as Clothing).id));
         router.push(`/detail/${current.id}`);
       }
       return;

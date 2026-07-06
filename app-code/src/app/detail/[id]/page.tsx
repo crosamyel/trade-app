@@ -62,6 +62,12 @@ export default function DetailPage() {
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
   const [photoIndex, setPhotoIndex] = useState(0);
+  const [closing, setClosing] = useState(false);
+
+  function goBack() {
+    setClosing(true);
+    setTimeout(() => router.back(), 280);
+  }
 
   const [me, setMe] = useState<string | null>(null);
   const [myItems, setMyItems] = useState<MyItem[]>([]);
@@ -162,7 +168,7 @@ export default function DetailPage() {
   if (!item) return (
     <div style={{ width: "100%", height: "100dvh", background: "#f9f4e8", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, fontFamily: FONT }}>
       <p style={{ color: "#3c2f22", fontWeight: 600 }}>Item not found.</p>
-      <button onClick={() => router.back()} style={{ padding: "10px 22px", background: "#FFC543", border: "none", borderRadius: 22, fontWeight: 800, fontSize: 15, cursor: "pointer" }}>← Go back</button>
+      <button onClick={goBack} style={{ padding: "10px 22px", background: "#FFC543", border: "none", borderRadius: 22, fontWeight: 800, fontSize: 15, cursor: "pointer" }}>← Go back</button>
     </div>
   );
 
@@ -190,11 +196,15 @@ export default function DetailPage() {
   }
 
   return (
-    <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: "#f9f4e8", fontFamily: FONT, minHeight: "100dvh", overflowY: "auto", overflowX: "hidden", animation: "slideUpDetail 0.38s cubic-bezier(0.4,0,0.2,1) both" }}>
+    <div style={{ width: "100%", maxWidth: 480, margin: "0 auto", background: "#f9f4e8", fontFamily: FONT, minHeight: "100dvh", overflowY: "auto", overflowX: "hidden", animation: closing ? "slideDownDetail 0.28s cubic-bezier(0.4,0,0.2,1) both" : "slideUpDetail 0.38s cubic-bezier(0.4,0,0.2,1) both" }}>
       <style>{`
         @keyframes slideUpDetail {
-          from { transform: translateY(40px); opacity: 0; }
+          from { transform: translateY(60px); opacity: 0; }
           to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes slideDownDetail {
+          from { transform: translateY(0); opacity: 1; }
+          to { transform: translateY(80px); opacity: 0; }
         }
       `}</style>
 
@@ -218,7 +228,7 @@ export default function DetailPage() {
           padding: "env(safe-area-inset-top) 16px 14px",
           boxSizing: "border-box", zIndex: 10,
         }}>
-          <button onClick={() => router.back()} style={{ width: 42, height: 42, borderRadius: "50%", background: "rgba(255,255,255,0.88)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(8px)", boxShadow: "0 2px 10px rgba(0,0,0,0.15)" }}>
+          <button onClick={goBack} style={{ width: 42, height: 42, borderRadius: "50%", background: "rgba(255,255,255,0.88)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(8px)", boxShadow: "0 2px 10px rgba(0,0,0,0.15)" }}>
             <svg width="18" height="14" viewBox="0 0 22 16" fill="none">
               <path d="M21 8H1M1 8L8 1M1 8L8 15" stroke="#3c2f22" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
