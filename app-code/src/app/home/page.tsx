@@ -161,8 +161,8 @@ export default function HomePage() {
       feedOffsetRef.current = 0;
       hasMoreRef.current = true;
 
-      const COLS = "id, user_id, image_url, image_back_url, image_label_url, image_detail_url, title, size, style, condition, coins_value, views, location, featured, profiles(username, avatar_url, city)";
-      const COLS_NOJOIN = "id, user_id, image_url, image_back_url, image_label_url, image_detail_url, title, size, style, condition, coins_value, views, location, featured";
+      const COLS = "id, user_id, image_url, image_back_url, image_label_url, image_detail_url, title, size, style, condition, coins_value, location, profiles(username, avatar_url, city)";
+      const COLS_NOJOIN = "id, user_id, image_url, image_back_url, image_label_url, image_detail_url, title, size, style, condition, coins_value, location";
 
       const userId = user.id;
       async function fetchClothing(withLikedFilter: boolean): Promise<Clothing[] | null> {
@@ -232,7 +232,7 @@ export default function HomePage() {
     const newOffset = feedOffsetRef.current + 100;
     const { sizes, styles, minCoins, city, avgCoins } = prefsRef.current;
     const likedIds = likedIdsRef.current;
-    const COLS = "id, user_id, image_url, image_back_url, image_label_url, image_detail_url, title, size, style, condition, coins_value, views, location, featured, profiles(username, avatar_url, city)";
+    const COLS = "id, user_id, image_url, image_back_url, image_label_url, image_detail_url, title, size, style, condition, coins_value, location, profiles(username, avatar_url, city)";
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let q: any = supabase
       .from("clothing").select(COLS)
