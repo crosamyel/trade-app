@@ -101,6 +101,17 @@ export default function DetailPage() {
       } else {
         clothingData = joined.data as Clothing;
       }
+
+      // If profiles join returned nothing (RLS / FK missing), fetch separately
+      if (clothingData && !clothingData.profiles && clothingData.user_id) {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("username, avatar_url, city")
+          .eq("id", clothingData.user_id)
+          .maybeSingle();
+        if (prof) clothingData = { ...clothingData, profiles: prof };
+      }
+
       setItem(clothingData);
 
       // Mes articles (pour la proposition d'échange)

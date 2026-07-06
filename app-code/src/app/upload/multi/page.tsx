@@ -203,6 +203,23 @@ export default function MultiUploadPage() {
   }
 
   /* ── Publish ───────────────────────────────────────────────────── */
+
+  /** Upload one dataUrl to Supabase storage, return public URL or null on error */
+  async function uploadOne(dataUrl: string, storagePath: string): Promise<string | null> {
+    const [header, base64] = dataUrl.split(",");
+    const mimeType = header.match(/:(.*?);/)?.[1] ?? "image/jpeg";
+    const ext = mimeType.split("/")[1] ?? "jpg";
+    const fullPath = `${storagePath}.${ext}`;
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    const blob = new Blob([bytes], { type: mimeType });
+    const { error } = await supabase.storage
+      .from("clothing-images")
+      .upload(fullPath, blob, { contentType: mimeType, upsert: true });
+    if (error) { console.error("[multi-upload] storage error:", error); return null; }
+    const { data: pub } = supabase.storage.from("clothing-images").getPublicUrl(fullPath);
+    return pub.publicUrl;
+  }
+
   async function publishAll() {
     if (groups.some((g) => g.analyzing)) return;
     setPhase("publishing");
@@ -213,23 +230,39 @@ export default function MultiUploadPage() {
 
     for (let idx = 0; idx < groups.length; idx++) {
       const group = groups[idx];
-      const frontPhotoUrl = rawPhotos[group.photoIndices[group.frontSubIdx]];
-      if (!frontPhotoUrl) continue;
+      const ts = Date.now();
+      const base = `${user.id}/${ts}_multi_${idx}`;
 
-      const [header, base64] = frontPhotoUrl.split(",");
-      const mimeType = header.match(/:(.*?);/)?.[1] ?? "image/jpeg";
-      const ext = mimeType.split("/")[1] ?? "jpg";
-      const path = `${user.id}/${Date.now()}_multi_${idx}.${ext}`;
-      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-      const blob = new Blob([bytes], { type: mimeType });
+      // ── Upload all photos in this group ──────────────────────────
+      // front photo → image_url (required)
+      const frontRawIdx = group.photoIndices[group.frontSubIdx];
+      const frontUrl = await uploadOne(rawPhotos[frontRawIdx], `${base}_front`);
+      if (!frontUrl) { setPublishError(`Upload failed for item ${idx + 1}`); setPhase("review"); return; }
 
-      const { error: upErr } = await supabase.storage
-        .from("clothing-images")
-        .upload(path, blob, { contentType: mimeType, upsert: true });
-      if (upErr) { setPublishError(`Upload failed for item ${idx + 1}`); setPhase("review"); return; }
+      // label photo → image_label_url (if labelSubIdx set)
+      let labelUrl: string | null = null;
+      if (group.labelSubIdx !== null) {
+        const labelRawIdx = group.photoIndices[group.labelSubIdx];
+        if (rawPhotos[labelRawIdx]) labelUrl = await uploadOne(rawPhotos[labelRawIdx], `${base}_label`);
+      }
 
-      const { data: pub } = supabase.storage.from("clothing-images").getPublicUrl(path);
+      // remaining photos (not front, not label) → back + detail
+      const otherSubIdxs = group.photoIndices
+        .map((_, si) => si)
+        .filter((si) => si !== group.frontSubIdx && si !== group.labelSubIdx);
 
+      let backUrl: string | null = null;
+      let detailUrl: string | null = null;
+      if (otherSubIdxs[0] !== undefined) {
+        const rawIdx = group.photoIndices[otherSubIdxs[0]];
+        if (rawPhotos[rawIdx]) backUrl = await uploadOne(rawPhotos[rawIdx], `${base}_back`);
+      }
+      if (otherSubIdxs[1] !== undefined) {
+        const rawIdx = group.photoIndices[otherSubIdxs[1]];
+        if (rawPhotos[rawIdx]) detailUrl = await uploadOne(rawPhotos[rawIdx], `${base}_detail`);
+      }
+
+      // ── Insert into DB ───────────────────────────────────────────
       const coinsToSave = group.coins_value ?? calculateCoins(group.condition, group.brand, group.category);
       const insertData: Record<string, unknown> = {
         user_id: user.id,
@@ -240,11 +273,13 @@ export default function MultiUploadPage() {
         style: group.style || null,
         category: group.category || null,
         description: group.description || null,
-        image_url: pub.publicUrl,
+        image_url: frontUrl,
         status: "active",
         coins_value: coinsToSave,
       };
-      // color — only insert if the column exists (avoids crash if not migrated yet)
+      if (backUrl)   insertData.image_back_url   = backUrl;
+      if (labelUrl)  insertData.image_label_url  = labelUrl;
+      if (detailUrl) insertData.image_detail_url = detailUrl;
       if (group.color) insertData.color = group.color;
 
       console.log(`[multi-upload] inserting item ${idx + 1}:`, insertData);
