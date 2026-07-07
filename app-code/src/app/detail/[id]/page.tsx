@@ -225,7 +225,7 @@ export default function DetailPage() {
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
-        <img src={currentPhoto} alt={item.title ?? "Item"} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        <img src={currentPhoto} alt={item.title ?? "Item"} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
 
         {/* Gradient bas */}
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.25) 0%, transparent 35%, transparent 55%, rgba(0,0,0,0.55) 100%)", pointerEvents: "none" }} />

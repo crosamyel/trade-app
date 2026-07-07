@@ -612,10 +612,9 @@ function StepVerify({ photos, analysis, setAnalysis, onPublished }: {
   const initialSuggested = analysis.coins_value ?? calculateCoins(analysis.condition, analysis.brand, analysis.category);
   const [coinsSuggested] = useState(initialSuggested);
   const [coinsValue, setCoinsValue] = useState(initialSuggested);
-  const minCoins = Math.max(5, Math.round(coinsSuggested * 0.85));
-  const maxCoins = Math.min(500, Math.round(coinsSuggested * 1.15));
-  const clampCoins = (v: number) => Math.min(maxCoins, Math.max(minCoins, v));
-  const coinsPct = coinsSuggested > 0 ? Math.round(((coinsValue - coinsSuggested) / coinsSuggested) * 100) : 0;
+  const MIN_COINS = 5;
+  const MAX_COINS = 500;
+  const clampCoins = (v: number) => Math.min(MAX_COINS, Math.max(MIN_COINS, v));
 
   // Only front photo is required — back/label are optional but help AI analysis
   const canSubmit = !!photos.front;
@@ -752,44 +751,41 @@ function StepVerify({ photos, analysis, setAnalysis, onPublished }: {
       <div style={{ marginTop: 14, background: "#f0e2b8", borderRadius: 18, padding: "12px 16px" }}>
         <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "#7a6f5d", marginBottom: 8 }}>
           🪙 Coins value
-          <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: "#b3a896" }}>— TRADE suggestion ±15%</span>
         </label>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button
             onClick={() => setCoinsValue((v) => clampCoins(v - 1))}
-            disabled={coinsValue <= minCoins}
-            style={{ width: 36, height: 36, borderRadius: "50%", border: "none", background: coinsValue <= minCoins ? "#c9b98a" : "#3c2f22", color: "#FFC543", fontSize: 22, fontWeight: 800, cursor: coinsValue <= minCoins ? "not-allowed" : "pointer", lineHeight: 1, flexShrink: 0 }}
+            disabled={coinsValue <= MIN_COINS}
+            style={{ width: 36, height: 36, borderRadius: "50%", border: "none", background: coinsValue <= MIN_COINS ? "#c9b98a" : "#3c2f22", color: "#FFC543", fontSize: 22, fontWeight: 800, cursor: coinsValue <= MIN_COINS ? "not-allowed" : "pointer", lineHeight: 1, flexShrink: 0 }}
           >−</button>
           <input
             type="number"
-            min={minCoins} max={maxCoins}
+            min={MIN_COINS} max={MAX_COINS}
             value={coinsValue}
-            onChange={(e) => setCoinsValue(clampCoins(Number(e.target.value) || minCoins))}
+            onChange={(e) => setCoinsValue(clampCoins(Number(e.target.value) || MIN_COINS))}
             style={{ flex: 1, height: 40, background: "#fff", border: "1.5px solid #d4b870", borderRadius: 12, textAlign: "center", fontSize: 20, fontWeight: 800, color: "#8a6d2a", outline: "none", fontFamily: "inherit" }}
           />
           <button
             onClick={() => setCoinsValue((v) => clampCoins(v + 1))}
-            disabled={coinsValue >= maxCoins}
-            style={{ width: 36, height: 36, borderRadius: "50%", border: "none", background: coinsValue >= maxCoins ? "#c9b98a" : "#3c2f22", color: "#FFC543", fontSize: 22, fontWeight: 800, cursor: coinsValue >= maxCoins ? "not-allowed" : "pointer", lineHeight: 1, flexShrink: 0 }}
+            disabled={coinsValue >= MAX_COINS}
+            style={{ width: 36, height: 36, borderRadius: "50%", border: "none", background: coinsValue >= MAX_COINS ? "#c9b98a" : "#3c2f22", color: "#FFC543", fontSize: 22, fontWeight: 800, cursor: coinsValue >= MAX_COINS ? "not-allowed" : "pointer", lineHeight: 1, flexShrink: 0 }}
           >+</button>
           <span style={{ fontSize: 22, flexShrink: 0 }}>🪙</span>
         </div>
         <input
-          type="range" min={minCoins} max={maxCoins}
+          type="range" min={MIN_COINS} max={MAX_COINS}
           value={coinsValue}
           onChange={(e) => setCoinsValue(Number(e.target.value))}
           style={{ width: "100%", marginTop: 10, accentColor: "#3c2f22" }}
         />
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#9a7d3a", marginTop: 2 }}>
-          <span>{minCoins} coins</span>
-          <span style={{ fontWeight: 700 }}>
-            {coinsPct === 0 ? "TRADE suggestion" : coinsPct > 0 ? `+${coinsPct}%` : `${coinsPct}%`}
-          </span>
-          <span>{maxCoins} coins</span>
+          <span>{MIN_COINS} coins</span>
+          <span style={{ fontWeight: 700 }}>💡 TRADE suggests {coinsSuggested}</span>
+          <span>{MAX_COINS} coins</span>
         </div>
         {analysis.coins_reason && (
           <p style={{ margin: "6px 0 0", fontSize: 11, color: "#9a7d3a", lineHeight: 1.4 }}>
-            💡 {analysis.coins_reason}
+            {analysis.coins_reason}
           </p>
         )}
       </div>

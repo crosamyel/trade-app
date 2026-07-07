@@ -223,60 +223,48 @@ export default function EditClothingPage() {
           />
         </div>
 
-        {/* Coins value — ±15% autour de la suggestion TRADE */}
+        {/* Coins value — montant libre (5–500) */}
         {(() => {
-          const minCoins = Math.max(5, Math.round(coinsSuggested * 0.85));
-          const maxCoins = Math.min(500, Math.round(coinsSuggested * 1.15));
-          const clamp = (v: number) => Math.min(maxCoins, Math.max(minCoins, v));
-          const pct = coinsSuggested > 0
-            ? Math.round(((coinsValue - coinsSuggested) / coinsSuggested) * 100)
-            : 0;
+          const MIN_C = 5;
+          const MAX_C = 500;
+          const clamp = (v: number) => Math.min(MAX_C, Math.max(MIN_C, v));
           return (
             <div style={{ marginBottom: 18 }}>
               <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "#7a6f5d", marginBottom: 6 }}>
                 🪙 Coins value
-                <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: "#b3a896" }}>— TRADE suggestion ±15%</span>
               </label>
               <div style={{ background: "#f0e2b8", borderRadius: 18, padding: "12px 16px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <button
                     onClick={() => setCoinsValue(v => clamp(v - 1))}
-                    disabled={coinsValue <= minCoins}
-                    style={{ width: 36, height: 36, borderRadius: "50%", border: "none", background: coinsValue <= minCoins ? "#c9b98a" : "#3c2f22", color: "#FFC543", fontSize: 22, fontWeight: 800, cursor: coinsValue <= minCoins ? "not-allowed" : "pointer", lineHeight: 1, flexShrink: 0 }}
+                    disabled={coinsValue <= MIN_C}
+                    style={{ width: 36, height: 36, borderRadius: "50%", border: "none", background: coinsValue <= MIN_C ? "#c9b98a" : "#3c2f22", color: "#FFC543", fontSize: 22, fontWeight: 800, cursor: coinsValue <= MIN_C ? "not-allowed" : "pointer", lineHeight: 1, flexShrink: 0 }}
                   >−</button>
                   <input
                     type="number"
-                    min={minCoins} max={maxCoins}
+                    min={MIN_C} max={MAX_C}
                     value={coinsValue}
-                    onChange={(e) => setCoinsValue(clamp(Number(e.target.value) || minCoins))}
+                    onChange={(e) => setCoinsValue(clamp(Number(e.target.value) || MIN_C))}
                     style={{ flex: 1, height: 40, background: "#fff", border: "1.5px solid #d4b870", borderRadius: 12, textAlign: "center", fontSize: 20, fontWeight: 800, color: "#8a6d2a", outline: "none", fontFamily: FONT }}
                   />
                   <button
                     onClick={() => setCoinsValue(v => clamp(v + 1))}
-                    disabled={coinsValue >= maxCoins}
-                    style={{ width: 36, height: 36, borderRadius: "50%", border: "none", background: coinsValue >= maxCoins ? "#c9b98a" : "#3c2f22", color: "#FFC543", fontSize: 22, fontWeight: 800, cursor: coinsValue >= maxCoins ? "not-allowed" : "pointer", lineHeight: 1, flexShrink: 0 }}
+                    disabled={coinsValue >= MAX_C}
+                    style={{ width: 36, height: 36, borderRadius: "50%", border: "none", background: coinsValue >= MAX_C ? "#c9b98a" : "#3c2f22", color: "#FFC543", fontSize: 22, fontWeight: 800, cursor: coinsValue >= MAX_C ? "not-allowed" : "pointer", lineHeight: 1, flexShrink: 0 }}
                   >+</button>
                   <span style={{ fontSize: 22, flexShrink: 0 }}>🪙</span>
                 </div>
-                {/* Barre de range */}
                 <input
-                  type="range" min={minCoins} max={maxCoins}
+                  type="range" min={MIN_C} max={MAX_C}
                   value={coinsValue}
                   onChange={(e) => setCoinsValue(Number(e.target.value))}
                   style={{ width: "100%", marginTop: 10, accentColor: "#3c2f22" }}
                 />
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#9a7d3a", marginTop: 2 }}>
-                  <span>{minCoins} coins</span>
-                  <span style={{ fontWeight: 700 }}>
-                    {pct === 0 ? "TRADE suggestion" : pct > 0 ? `+${pct}%` : `${pct}%`}
-                  </span>
-                  <span>{maxCoins} coins</span>
+                  <span>{MIN_C} coins</span>
+                  <span style={{ fontWeight: 700 }}>💡 TRADE suggests {coinsSuggested}</span>
+                  <span>{MAX_C} coins</span>
                 </div>
-                <p style={{ margin: "6px 0 0", fontSize: 11, color: "#9a7d3a", lineHeight: 1.4 }}>
-                  💡 {brand && condition
-                    ? `${condition} ${brand} → ${coinsSuggested} coins suggested by TRADE`
-                    : "Value calculated by TRADE based on brand and condition"}
-                </p>
               </div>
             </div>
           );

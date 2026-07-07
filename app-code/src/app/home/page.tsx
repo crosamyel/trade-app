@@ -91,6 +91,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [returning, setReturning] = useState(false);
   const [activeAds, setActiveAds] = useState<Ad[]>([]);
   const [photoIdx, setPhotoIdx] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -344,6 +345,26 @@ export default function HomePage() {
     setCurrentIndex((i) => i + 1);
   }
 
+  function goBack() {
+    if (currentIndex <= 0) return;
+    const prevItem = stack[currentIndex - 1];
+    // Remove the previous item from sessionSeen so it isn't filtered next session
+    if (prevItem && currentUser) {
+      const seenKey = `trade_seen_ids_${currentUser.id}`;
+      const seenStr = sessionStorage.getItem(seenKey) ?? "";
+      const seenIds = new Set(seenStr.split(",").filter(Boolean));
+      seenIds.delete(String(prevItem.id));
+      sessionStorage.setItem(seenKey, [...seenIds].join(","));
+    }
+    setExitDir(null);
+    setDragX(0); dragXRef.current = 0;
+    setPhotoIdx(0);
+    setSaved(false);
+    setReturning(true);
+    setCurrentIndex((i) => i - 1);
+    setTimeout(() => setReturning(false), 420);
+  }
+
   // Envoi de la proposition : enregistre le like (item proposé + coins) + vérifie le match
   async function sendProposal(myItem: Clothing, offeredCoins: number) {
     const item = proposingFor;
@@ -449,24 +470,21 @@ export default function HomePage() {
     const dy = dragYRef.current;
     dragYRef.current = 0; setDragY(0);
     const isVertical = Math.abs(dy) > Math.abs(dx);
-    // Swipe haut dominant → page de détail (ou lien publicitaire pour les ads)
-    if (dy < -80 && isVertical && current) {
+    // Swipe haut dominant → undo (retour à l'article précédent)
+    if (dy < -80 && isVertical) {
       setDragX(0); dragXRef.current = 0;
       if (isCurrentAd) {
         const adLink = (current as Ad).link_url;
         if (adLink) window.open(adLink, "_blank", "noopener,noreferrer");
       } else {
-        // Save current position so we can restore it when coming back
-        sessionStorage.setItem("trade_detail_return_id", String((current as Clothing).id));
-        router.push(`/detail/${current.id}`);
+        goBack();
       }
       return;
     }
-    // Swipe bas dominant → article précédent
-    if (dy > 80 && isVertical && currentIndex > 0) {
+    // Swipe bas dominant → aussi undo (les deux directions fonctionnent)
+    if (dy > 80 && isVertical) {
       setDragX(0); dragXRef.current = 0;
-      setExitDir(null);
-      setCurrentIndex((i) => i - 1);
+      goBack();
       return;
     }
     if (dx > 60) decide("right");
@@ -510,6 +528,14 @@ export default function HomePage() {
         animation: "homeEntry 0.22s ease-out both",
       }}
     >
+      <style>{`
+        @keyframes slideBackFromLeft {
+          0%   { transform: translateX(-105vw) rotate(-12deg); opacity: 0; }
+          60%  { transform: translateX(8px) rotate(1.5deg); opacity: 1; }
+          80%  { transform: translateX(-4px) rotate(-0.5deg); opacity: 1; }
+          100% { transform: translateX(0) rotate(0deg); opacity: 1; }
+        }
+      `}</style>
       {/* ===== HEADER ===== */}
       <div
         style={{
@@ -592,13 +618,17 @@ export default function HomePage() {
               position: "relative", width: "100%", height: "100%",
               cursor: dragging ? "grabbing" : "grab", touchAction: "none",
               userSelect: "none",
-              transform: exitDir
-                ? `translateX(${exitDir === "right" ? "110vw" : "-110vw"}) rotate(${exitDir === "right" ? 15 : -15}deg)`
-                : `translateX(${dragX}px) rotate(${Math.max(-8, Math.min(8, dragX * 0.05))}deg)`,
-              opacity: exitDir ? 0 : 1,
-              transition: exitDir
-                ? "transform 0.3s ease, opacity 0.3s ease"
-                : (dragging ? "none" : "transform 0.25s ease"),
+              ...(returning ? {
+                animation: "slideBackFromLeft 0.42s cubic-bezier(0.34, 1.3, 0.64, 1) both",
+              } : {
+                transform: exitDir
+                  ? `translateX(${exitDir === "right" ? "110vw" : "-110vw"}) rotate(${exitDir === "right" ? 15 : -15}deg)`
+                  : `translateX(${dragX}px) rotate(${Math.max(-8, Math.min(8, dragX * 0.05))}deg)`,
+                opacity: exitDir ? 0 : 1,
+                transition: exitDir
+                  ? "transform 0.3s ease, opacity 0.3s ease"
+                  : (dragging ? "none" : "transform 0.25s ease"),
+              }),
             }}
           >
             {isCurrentAd ? (
@@ -620,6 +650,31 @@ export default function HomePage() {
                     <span style={{ background: "#FFC543", color: "#2D1A0A", fontWeight: 800, fontSize: 11, padding: "4px 10px", borderRadius: 16, boxShadow: "0 2px 8px rgba(255,197,67,0.5)" }}>⭐ Featured</span>
                   </div>
                 )}
+                {/* Info button → detail page */}
+                <button
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    sessionStorage.setItem("trade_detail_return_id", String((current as Clothing).id));
+                    router.push(`/detail/${(current as Clothing).id}`);
+                  }}
+                  style={{
+                    position: "absolute", bottom: 14, right: 14, zIndex: 8,
+                    width: 38, height: 38, borderRadius: "50%",
+                    background: "rgba(255,255,255,0.88)",
+                    border: "none", cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    backdropFilter: "blur(8px)",
+                    boxShadow: "0 2px 10px rgba(0,0,0,0.15)",
+                  }}
+                  aria-label="View details"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="#3c2f22" strokeWidth="2"/>
+                    <path d="M12 8v.01M12 11v5" stroke="#3c2f22" strokeWidth="2.2" strokeLinecap="round"/>
+                  </svg>
+                </button>
               </>
             )}
           </div>
